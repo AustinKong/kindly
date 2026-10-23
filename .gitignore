@@ -1,3 +1,15 @@
-# Godot 4+ specific ignores
+# Godot-generated import and editor caches
 .godot/
-/android/
+.import/
+*.translation
+
+# Godot Android build directory
+android/
+
+# Local editor and OS noise
+.DS_Store
+Thumbs.db
+*.log
+
+# Test and capture artifacts
+tests/artifacts/

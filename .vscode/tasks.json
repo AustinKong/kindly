@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Godot: Import",
+      "type": "shell",
+      "command": "godot",
+      "args": ["--headless", "--path", "${workspaceFolder}", "--import"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Godot: Run",
+      "type": "shell",
+      "command": "godot",
+      "args": ["--path", "${workspaceFolder}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Godot: Editor",
+      "type": "shell",
+      "command": "godot",
+      "args": ["--editor", "--path", "${workspaceFolder}"],
+      "problemMatcher": []
+    }
+  ]
+}
