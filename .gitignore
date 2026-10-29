@@ -10,6 +10,3 @@ android/
 .DS_Store
 Thumbs.db
 *.log
-
-# Test and capture artifacts
-tests/artifacts/

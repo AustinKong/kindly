@@ -5,21 +5,23 @@
       "label": "Godot: Import",
       "type": "shell",
       "command": "godot",
-      "args": ["--headless", "--path", "${workspaceFolder}", "--import"],
-      "problemMatcher": []
-    },
-    {
-      "label": "Godot: Run",
-      "type": "shell",
-      "command": "godot",
-      "args": ["--path", "${workspaceFolder}"],
+      "args": [
+        "--headless",
+        "--path",
+        "${workspaceFolder}",
+        "--import"
+      ],
       "problemMatcher": []
     },
     {
       "label": "Godot: Editor",
       "type": "shell",
       "command": "godot",
-      "args": ["--editor", "--path", "${workspaceFolder}"],
+      "args": [
+        "--editor",
+        "--path",
+        "${workspaceFolder}"
+      ],
       "problemMatcher": []
     }
   ]
