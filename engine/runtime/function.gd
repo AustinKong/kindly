@@ -6,3 +6,6 @@ const Chunk = preload("res://engine/runtime/chunk.gd")
 var chunk: Chunk = Chunk.new()
 var arity: int = 0
 var name: String
+var upvalue_count: int
+
+# TODO: Might this benefit from constructor

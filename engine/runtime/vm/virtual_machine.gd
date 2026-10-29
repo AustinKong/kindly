@@ -1,11 +1,12 @@
 extends RefCounted
 
-const Chunk = preload("res://engine/runtime/chunk.gd")
-const CallFrame = preload("res://engine/runtime/call_frame.gd")
+const Closure = preload("res://engine/runtime/vm/closure.gd")
+const Cell = preload("res://engine/runtime/vm/cell.gd")
+const CallFrame = preload("res://engine/runtime/vm/call_frame.gd")
 const Function = preload("res://engine/runtime/function.gd")
-const NativeFunction = preload("res://engine/runtime/native_function.gd")
+const NativeFunction = preload("res://engine/runtime/vm/native_function.gd")
 const OpCode = preload("res://engine/runtime/opcode.gd")
-const RuntimeError = preload("res://engine/runtime/runtime_error.gd")
+const RuntimeError = preload("res://engine/runtime/vm/runtime_error.gd")
 
 const NUMBER_TYPES = [TYPE_INT, TYPE_FLOAT]
 const MAX_CALL_STACK_SIZE = 256
@@ -20,8 +21,7 @@ var _call_stack: Array[CallFrame] = []
 # TODO: Consider if we want to store locals in call frame instead of value stack.
 ## Executes a function, returning null on success or a RuntimeError on failure.
 func interpret(function: Function) -> RuntimeError:
-	_stack.push_back(function)
-	_call_stack.append(CallFrame.new(function))
+	_call_stack.append(CallFrame.new(Closure.new(function)))
 	var remaining_instructions := INSTRUCTION_LIMIT
 
 	while true:
@@ -32,7 +32,7 @@ func interpret(function: Function) -> RuntimeError:
 		var instruction := _read_byte()
 		match instruction:
 			OpCode.CONSTANT:
-				_stack.push_back(_current_frame().function.chunk.constants[_read_byte()])
+				_stack.push_back(_read_constant())
 			OpCode.TRUE: _stack.push_back(true)
 			OpCode.FALSE: _stack.push_back(false)
 			OpCode.NONE: _stack.push_back(null)
@@ -85,9 +85,13 @@ func interpret(function: Function) -> RuntimeError:
 
 				_stack.push_back(_globals[name])
 			OpCode.SET_LOCAL:
-				_stack[_current_frame().slot_start + _read_byte()] = _stack.back()
+				_current_frame().locals[_read_byte()].value = _stack.back()
 			OpCode.GET_LOCAL:
-				_stack.push_back(_stack[_current_frame().slot_start + _read_byte()])
+				_stack.push_back(_current_frame().locals[_read_byte()].value)
+			OpCode.DEFINE_LOCAL:
+				_current_frame().locals.append(Cell.new(_stack.pop_back()))
+			OpCode.POP_LOCAL:
+				_current_frame().locals.pop_back()
 			OpCode.JUMP_IF_FALSE:
 				var offset := _read_two_bytes()
 				if _is_falsy(_stack.back()):
@@ -103,32 +107,62 @@ func interpret(function: Function) -> RuntimeError:
 				var arg_count := _read_byte()
 				var callee: Variant = _stack[- (arg_count + 1)]
 
-				if not (callee is Function or callee is NativeFunction):
+				if not (callee is Closure or callee is NativeFunction):
 					return _runtime_error("Only functions can be called.")
 
-				if arg_count != callee.arity:
-					return _runtime_error("Expected %d arguments but got %d." % [callee.arity, arg_count])
-
-				if callee is Function:
+				if callee is Closure:
+					if arg_count != callee.function.arity:
+						return _runtime_error("Expected %d arguments but got %d." % [callee.function.arity, arg_count])
 					if len(_call_stack) >= MAX_CALL_STACK_SIZE:
 						return _runtime_error("Stack overflow.")
-					# Slot 0 is reserved for the function itself.
-					_call_stack.append(CallFrame.new(callee, len(_stack) - arg_count - 1))
+
+					_call_stack.append(CallFrame.new(callee))
+					# Copy args to call frame locals.
+					var args := []
+					for i in range(arg_count):
+						args.append(_stack.pop_back())
+					# Need to push reversed. See if there is better way to do this.
+					for i in range(arg_count - 1, -1, -1):
+						_call_stack.back().locals.push_back(Cell.new(args[i]))
+					# The frame now owns the function reference.
+					_stack.pop_back()
 				else:
+					if arg_count != callee.arity:
+						return _runtime_error("Expected %d arguments but got %d." % [callee.arity, arg_count])
 					# Use len(_stack) - arg_count instead of -arg_count as slice(0) copies entire array.
 					var args := _stack.slice(len(_stack) - arg_count)
 					var result: Variant = callee.callable.callv(args)
 					_stack.resize(len(_stack) - arg_count - 1)
 					_stack.push_back(result)
 			OpCode.RETURN:
+				# Statements preserve operand-stack height, including paths that return early.
+				# Only the return value remains above the caller's operands, so no stack resize is needed.
 				var result: Variant = _stack.pop_back()
-				# O(n) but good enough.
-				_stack.resize(_current_frame().slot_start)
 				_call_stack.pop_back()
 				# Script completed running.
 				if len(_call_stack) == 0:
 					return null
 				_stack.push_back(result)
+			OpCode.CLOSURE:
+				var fn: Function = _read_constant()
+				var closure = Closure.new(fn)
+
+				for i in range(fn.upvalue_count):
+					var is_local := _read_byte() == 1
+					var index := _read_byte()
+
+					if is_local:
+						closure.upvalues.append(_current_frame().locals[index])
+					else:
+						closure.upvalues.append(_current_frame().closure.upvalues[index])
+
+				_stack.push_back(closure)
+			OpCode.GET_UPVALUE:
+				var index := _read_byte()
+				_stack.push_back(_current_frame().closure.upvalues[index].value)
+			OpCode.SET_UPVALUE:
+				var index := _read_byte()
+				_current_frame().closure.upvalues[index].value = _stack.back()
 
 	return null
 
@@ -141,12 +175,12 @@ func _current_frame() -> CallFrame:
 
 ## Reads a constant from the current frame's function using the next byte as its index.
 func _read_constant() -> Variant:
-	return _current_frame().function.chunk.constants[_read_byte()]
+	return _current_frame().closure.function.chunk.constants[_read_byte()]
 
 ## Reads a byte from the current frame's function and increments that frame's pc.
 func _read_byte() -> int:
 	var frame := _current_frame()
-	var byte := frame.function.chunk.code[frame.pc]
+	var byte := frame.closure.function.chunk.code[frame.pc]
 	frame.pc += 1
 	return byte
 
@@ -159,48 +193,13 @@ func _read_two_bytes() -> int:
 
 func _runtime_error(message: String) -> RuntimeError:
 	var frame := _current_frame()
-	var line := frame.function.chunk.lines[frame.pc - 1]
+	var line := frame.closure.function.chunk.lines[frame.pc - 1]
 	return RuntimeError.new(message, line)
 
 
 func define_native_function(name: String, callable: Callable):
 	_globals[name] = NativeFunction.new(name, callable)
 
-
-func disassemble(chunk: Chunk) -> void:
-	var offset := 0
-	while offset < len(chunk.code):
-		print("%04d" % [offset])
-
-		if offset > 0 and chunk.lines[offset] == chunk.lines[offset - 1]:
-			print("   | ")
-		else:
-			print("%04d" % [chunk.lines[offset]])
-
-		match chunk.code[offset]:
-			OpCode.RETURN: print("RETURN")
-			OpCode.NEGATE: print("NEGATE")
-			OpCode.ADD: print("ADD")
-			OpCode.SUBTRACT: print("SUBTRACT")
-			OpCode.MULTIPLY: print("MULTIPLY")
-			OpCode.DIVIDE: print("DIVIDE")
-			OpCode.EQUAL: print("EQUAL")
-			OpCode.GREATER: print("GREATER")
-			OpCode.LESS: print("LESS")
-			OpCode.NOT: print("NOT")
-			OpCode.TRUE: print("TRUE")
-			OpCode.FALSE: print("FALSE")
-			OpCode.NONE: print("NONE")
-			OpCode.CONSTANT:
-				print("CONSTANT %4d" % [chunk.code[offset + 1]])
-				offset += 1 # Consumes two code entries.
-			OpCode.GET_GLOBAL, OpCode.SET_GLOBAL, OpCode.DEFINE_GLOBAL:
-				var names := {OpCode.GET_GLOBAL: "GET_GLOBAL", OpCode.SET_GLOBAL: "SET_GLOBAL", OpCode.DEFINE_GLOBAL: "DEFINE_GLOBAL"}
-				print("%s %4d" % [names[chunk.code[offset]], chunk.code[offset + 1]])
-				offset += 1
-			_: print("Unknown opcode")
-
-		offset += 1
 
 func _is_falsy(value: Variant) -> bool:
 	return not bool(value)

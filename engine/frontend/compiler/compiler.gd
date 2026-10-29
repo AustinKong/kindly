@@ -3,6 +3,7 @@ extends RefCounted
 ## Compiles expressions directly to bytecode using a binding power Pratt parser.
 ## Prefix handlers parse the start of an expression; infix handlers extend an existing one.
 
+const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
 const Function = preload("res://engine/runtime/function.gd")
 const Token = preload("res://engine/frontend/token.gd")
 const OpCode = preload("res://engine/runtime/opcode.gd")
@@ -45,6 +46,17 @@ class Local extends RefCounted:
 		depth = p_depth
 
 
+class Upvalue extends RefCounted:
+	## Tracks the index this upvalue references in enclosing's _upvalues or _locals arrays.
+	var index_in_enclosing: int
+	## If true, index_in_enclosing references _locals array, otherwise references _upvalues array.
+	var is_local: bool
+
+	func _init(p_index_in_enclosing: int, p_is_local: bool) -> void:
+		index_in_enclosing = p_index_in_enclosing
+		is_local = p_is_local
+
+
 var RULES: Dictionary[int, ParseRule]
 
 # https://www.youtube.com/watch?v=0c8b7YfsBKs
@@ -63,14 +75,19 @@ var _is_script: bool
 var _locals: Array[Local] = []
 var _scope_depth := 0
 
+var _enclosing: Compiler
+var _upvalues: Array[Upvalue] = []
+
 ## Only the first error is retained; any partial function is discarded on failure.
 var _compile_error: CompileError
 
 
+# TODO: Technically enclosing holds enough info to identify is_script?
 ## Creates a compilation context over source and tokens, starting at the given unconsumed token.
-func _init(p_source: String, p_tokens: Array[Token], p_is_script: bool = true, p_token_index: int = 0) -> void:
+func _init(p_source: String, p_tokens: Array[Token], p_enclosing: Compiler = null, p_is_script: bool = true, p_token_index: int = 0) -> void:
 	_source = p_source
 	_tokens = p_tokens
+	_enclosing = p_enclosing
 	_is_script = p_is_script
 	_token_index = p_token_index
 
@@ -195,19 +212,27 @@ func _parse_variable_declaration() -> void:
 		_emit_byte(OpCode.DEFINE_GLOBAL)
 		_emit_byte(constant_index)
 	else:
+		_emit_byte(OpCode.DEFINE_LOCAL)
 		_locals[local_index].is_initialized = true
 
 
 func _parse_function_declaration():
-	if not _is_script:
-		_error("Nested functions are not implemented yet.")
-		return
 	if not _consume(Token.Type.IDENTIFIER, "Expect function name."):
 		return
 	var function_name := _previous_lexeme()
 	var name_constant_index := _add_constant(function_name)
 
-	var function_compiler = get_script().new(_source, _tokens, false, _token_index)
+	# Need to add function to locals before compilation and CLOSURE, such that the closure captures its own name for recursion.
+	var local_index: Variant
+	if _scope_depth > 0:
+		local_index = _declare_local(function_name, true)
+		if local_index == null:
+			return
+		# Register as NONE first as the function isn't compiled yet.
+		_emit_byte(OpCode.NONE)
+		_emit_byte(OpCode.DEFINE_LOCAL)
+
+	var function_compiler := Compiler.new(_source, _tokens, self, false, _token_index)
 
 	var compiled: Variant = function_compiler.compile()
 	# Continue where the function compilation left-off.
@@ -221,10 +246,21 @@ func _parse_function_declaration():
 	var function: Function = compiled
 	function.name = function_name
 
-	_emit_constant(function)
+	_emit_byte(OpCode.CLOSURE)
+	_emit_byte(_add_constant(function))
 
-	_emit_byte(OpCode.DEFINE_GLOBAL)
-	_emit_byte(name_constant_index)
+	# Emit pairs of is_local and index.
+	for i in range(function.upvalue_count):
+		_emit_byte(1 if function_compiler._upvalues[i].is_local else 0)
+		_emit_byte(function_compiler._upvalues[i].index_in_enclosing)
+
+	if _scope_depth == 0:
+		_emit_byte(OpCode.DEFINE_GLOBAL)
+		_emit_byte(name_constant_index)
+	else:
+		_emit_byte(OpCode.SET_LOCAL)
+		_emit_byte(local_index)
+		_emit_byte(OpCode.POP)
 
 
 ## Parses parameter names and registers them as initialized locals in the function's scope.
@@ -337,6 +373,7 @@ func _parse_for_statement():
 
 	_consume(Token.Type.EQUAL, "Expected '=' after loop variable.")
 	_parse_expression()
+	_emit_byte(OpCode.DEFINE_LOCAL)
 	_locals[counter_local_index].is_initialized = true
 
 	_consume(Token.Type.TO, "Expected 'to' after loop initializer.")
@@ -348,6 +385,7 @@ func _parse_for_statement():
 	if end_local_index == null:
 		_end_scope()
 		return
+	_emit_byte(OpCode.DEFINE_LOCAL)
 
 	if _match(Token.Type.STEP):
 		_parse_expression()
@@ -359,21 +397,18 @@ func _parse_for_statement():
 	if step_local_index == null:
 		_end_scope()
 		return
-
-	var counter_slot: int = counter_local_index + 1
-	var end_slot: int = end_local_index + 1
-	var step_slot: int = step_local_index + 1
+	_emit_byte(OpCode.DEFINE_LOCAL)
 
 	var loop_start := len(_function.chunk.code)
 
 	# Check (i - end) * step < 0 at runtime to handle both positive and negative steps.
 	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(counter_slot)
+	_emit_byte(counter_local_index)
 	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(end_slot)
+	_emit_byte(end_local_index)
 	_emit_byte(OpCode.SUBTRACT)
 	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(step_slot)
+	_emit_byte(step_local_index)
 	_emit_byte(OpCode.MULTIPLY)
 	_emit_constant(0)
 	_emit_byte(OpCode.LESS)
@@ -381,16 +416,16 @@ func _parse_for_statement():
 	var exit_backpatch_position := _emit_jump(OpCode.JUMP_IF_FALSE)
 	_emit_byte(OpCode.POP)
 
-	_parse_block()
+	_parse_scoped_block()
 
 	# Increment counter by step.
 	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(counter_slot)
+	_emit_byte(counter_local_index)
 	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(step_slot)
+	_emit_byte(step_local_index)
 	_emit_byte(OpCode.ADD)
 	_emit_byte(OpCode.SET_LOCAL)
-	_emit_byte(counter_slot)
+	_emit_byte(counter_local_index)
 	_emit_byte(OpCode.POP)
 
 	_emit_jump(OpCode.JUMP, loop_start)
@@ -405,14 +440,23 @@ func _parse_for_statement():
 func _parse_variable_assignment() -> void:
 	_advance()
 
-	var local_index: Variant = _find_local_index(_previous_lexeme())
-	var set_opcode := OpCode.SET_GLOBAL
-	var operand: int
+	var name := _previous_lexeme()
+
+	var set_opcode
+	var operand
+
+	var local_index: Variant = _resolve_local(name)
 	if local_index != null:
 		set_opcode = OpCode.SET_LOCAL
-		operand = local_index + 1
+		operand = local_index
 	else:
-		operand = _add_constant(_previous_lexeme())
+		var upvalue_index: Variant = _resolve_upvalue(name)
+		if upvalue_index != null:
+			set_opcode = OpCode.SET_UPVALUE
+			operand = upvalue_index
+		else:
+			set_opcode = OpCode.SET_GLOBAL
+			operand = _add_constant(name)
 
 	_consume(Token.Type.EQUAL, "Expect '=' after assignment target.")
 	_parse_expression()
@@ -468,19 +512,24 @@ func _parse_literal(_min_bp: int) -> void:
 
 
 func _parse_variable(_min_bp: int) -> void:
-	var local_index: Variant = _find_local_index(_previous_lexeme())
+	var name := _previous_lexeme()
 
+	var local_index: Variant = _resolve_local(name)
 	if local_index != null:
 		if not _locals[local_index].is_initialized:
 			_error("Cannot read local variable in its own initializer.", _previous())
-		# Slot zero holds the function, so local indices start at one.
-		var slot: int = local_index + 1
 		_emit_byte(OpCode.GET_LOCAL)
-		_emit_byte(slot)
-	else:
-		var constant_index := _add_constant(_previous_lexeme())
-		_emit_byte(OpCode.GET_GLOBAL)
-		_emit_byte(constant_index)
+		_emit_byte(local_index)
+		return
+
+	var upvalue_index: Variant = _resolve_upvalue(name)
+	if upvalue_index != null:
+		_emit_byte(OpCode.GET_UPVALUE)
+		_emit_byte(upvalue_index)
+		return
+
+	_emit_byte(OpCode.GET_GLOBAL)
+	_emit_byte(_add_constant(name))
 
 
 ## Parses a parenthesized expression with a fresh binding power threshold and consumes ')'.
@@ -620,8 +669,8 @@ func _consume(type: Token.Type, message_if_invalid: String) -> bool:
 	return false
 
 
-## Returns the nearest index in _locals, or null if absent; callers add one for the VM slot.
-func _find_local_index(name: String) -> Variant:
+## Returns the nearest index in _locals, or null if absent; indices address frame cells directly.
+func _resolve_local(name: String) -> Variant:
 	# Unnamed locals are referenced purely via index received at creation. Their lifecycle is managed by VM.
 	if name == "" or _scope_depth == 0:
 		return null
@@ -632,6 +681,33 @@ func _find_local_index(name: String) -> Variant:
 	return null
 
 
+func _resolve_upvalue(name: String) -> Variant:
+	if _enclosing == null:
+		return null
+
+	var enclosing_local: Variant = _enclosing._resolve_local(name)
+	if enclosing_local != null:
+		return _add_upvalue(enclosing_local, true)
+
+	var enclosing_upvalue: Variant = _enclosing._resolve_upvalue(name)
+	if enclosing_upvalue != null:
+		return _add_upvalue(enclosing_upvalue, false)
+
+	return null
+
+
+## Attempts to add an upvalue to _upvalues array and returns index; returns existing index instead if found.
+func _add_upvalue(index: int, is_local: bool) -> int:
+	# Don't recreate an upvalue if it already exists with same index and is_local
+	for i in range(len(_upvalues)):
+		if _upvalues[i].index_in_enclosing == index and _upvalues[i].is_local == is_local:
+			return i
+	_upvalues.append(Upvalue.new(index, is_local))
+	# This count should always match the length of _upvalues array.
+	_function.upvalue_count += 1
+	return _function.upvalue_count - 1
+
+
 ## Registers local metadata without consuming tokens or emitting bytecode; returns its index or null on failure.
 ## Empty names identify temporaries; initialized locals can be read immediately.
 func _declare_local(name: String, is_initialized: bool = false) -> Variant:
@@ -639,7 +715,7 @@ func _declare_local(name: String, is_initialized: bool = false) -> Variant:
 		_error("Too many local variables in function.", _previous())
 		return null
 
-	var existing_local_index: Variant = _find_local_index(name)
+	var existing_local_index: Variant = _resolve_local(name)
 	if existing_local_index != null and _locals[existing_local_index].depth == _scope_depth:
 		_error("Already a variable with this name in this scope.", _previous())
 		return null
@@ -652,9 +728,9 @@ func _declare_local(name: String, is_initialized: bool = false) -> Variant:
 
 func _end_scope() -> void:
 	_scope_depth -= 1
-	# Clean up local variables on value stack.
+	# Remove local cells belonging to the scope being exited.
 	while len(_locals) > 0 and _locals[-1].depth > _scope_depth:
-		_emit_byte(OpCode.POP)
+		_emit_byte(OpCode.POP_LOCAL)
 		_locals.pop_back()
 
 
