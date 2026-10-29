@@ -1,4 +1,3 @@
-class_name Token
 extends RefCounted
 
 enum Type {
@@ -7,7 +6,7 @@ enum Type {
 	LEFT_BRACE, RIGHT_BRACE,
 	LEFT_BRACKET, RIGHT_BRACKET,
 	LEFT_PARENTHESES, RIGHT_PARENTHESES,
-	MINUS, PERCENT, PERIOD, PLUS, SLASH,
+	MINUS, PERCENT, DOT, PLUS, SLASH,
 	# One or two character tokens.
 	# Call it BANG_EQUAL instead of NOT_EQUAL to disambiguate with NOT.
 	BANG_EQUAL,
@@ -18,11 +17,11 @@ enum Type {
 	IDENTIFIER, NUMBER, STRING,
 	# Keywords.
 	AND, DEF, ELSE, FALSE, FOR, IF,
-	NONE, NOT, OR, RETURN, TRUE, WHILE,
+	NONE, NOT, OR, RETURN, STEP, TO, TRUE, VAR, WHILE,
 	# Whitespace.
 	DEDENT, INDENT, NEWLINE,
 	# Misc.
-	EOF, ERROR
+	EOF
 }
 
 var type: Type
@@ -30,12 +29,9 @@ var line: int
 ## Character offset in the lexer's normalized source.
 var start: int
 var length: int
-## Diagnostic text for ERROR tokens; empty for other token types.
-var message: String
 
-func _init(p_type: Type, p_line: int, p_start: int, p_length: int, p_message: String = ""):
+func _init(p_type: Type, p_line: int, p_start: int, p_length: int):
 	type = p_type
 	line = p_line
 	start = p_start
 	length = p_length
-	message = p_message
