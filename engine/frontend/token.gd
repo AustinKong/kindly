@@ -16,7 +16,7 @@ enum Type {
 	# Literals.
 	IDENTIFIER, NUMBER, STRING,
 	# Keywords.
-	AND, DEF, ELSE, FALSE, FOR, IF,
+	AND, DEF, ELIF, ELSE, FALSE, FOR, IF,
 	NONE, NOT, OR, RETURN, STEP, TO, TRUE, VAR, WHILE,
 	# Whitespace.
 	DEDENT, INDENT, NEWLINE,

@@ -1,7 +1,7 @@
 extends RefCounted
 
-const Closure = preload("res://engine/runtime/vm/closure.gd")
-const Cell = preload("res://engine/runtime/vm/cell.gd")
+const Closure = preload("res://engine/virtual_machine/closure.gd")
+const Cell = preload("res://engine/virtual_machine/cell.gd")
 
 var closure: Closure
 var pc: int

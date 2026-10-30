@@ -4,13 +4,79 @@ extends RefCounted
 ## Prefix handlers parse the start of an expression; infix handlers extend an existing one.
 
 const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
-const Function = preload("res://engine/runtime/function.gd")
 const Token = preload("res://engine/frontend/token.gd")
-const OpCode = preload("res://engine/runtime/opcode.gd")
 const CompileError = preload("res://engine/frontend/compiler/compile_error.gd")
+const CompiledFunction = preload("res://engine/bytecode/compiled_function.gd")
+const OpCode = preload("res://engine/bytecode/opcode.gd")
 
+const MAX_LOCALS: int = 255
+const MAX_CONSTANTS: int = 256
+const MAX_ARGUMENTS: int = 255
+const MAX_UPVALUES: int = 256
 const MIN_JUMP_OFFSET: int = -0x8000
 const MAX_JUMP_OFFSET: int = 0x7fff
+
+
+# Fixed grammar table. Rule objects and bound handlers require instance initialization.
+# Pratt parser reference: https://www.youtube.com/watch?v=0c8b7YfsBKs
+var RULES: Dictionary[int, ParseRule] = {
+	Token.Type.NUMBER: ParseRule.new(_parse_number),
+	Token.Type.STRING: ParseRule.new(_parse_string),
+	Token.Type.IDENTIFIER: ParseRule.new(_parse_variable),
+	Token.Type.TRUE: ParseRule.new(_parse_literal),
+	Token.Type.FALSE: ParseRule.new(_parse_literal),
+	Token.Type.NONE: ParseRule.new(_parse_literal),
+	Token.Type.LEFT_PARENTHESES: ParseRule.new(
+		_parse_grouping, 0, _parse_call, 170, 171
+	),
+	Token.Type.LEFT_BRACKET: ParseRule.new(
+		_parse_list, 0, _parse_index, 170, 171
+	),
+	Token.Type.LEFT_BRACE: ParseRule.new(_parse_dictionary),
+	Token.Type.DOT: ParseRule.new(
+		Callable(), 0, _parse_property, 170, 171
+	),
+	Token.Type.PLUS: ParseRule.new(
+		_parse_unary, 140, _parse_binary, 120, 121
+	),
+	Token.Type.MINUS: ParseRule.new(
+		_parse_unary, 140, _parse_binary, 120, 121
+	),
+	Token.Type.ASTERISK: ParseRule.new(
+		Callable(), 0, _parse_binary, 130, 131
+	),
+	Token.Type.SLASH: ParseRule.new(
+		Callable(), 0, _parse_binary, 130, 131
+	),
+	Token.Type.PERCENT: ParseRule.new(
+		Callable(), 0, _parse_binary, 130, 131
+	),
+	Token.Type.EQUAL_EQUAL: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.BANG_EQUAL: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.LESS: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.LESS_EQUAL: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.GREATER: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.GREATER_EQUAL: ParseRule.new(
+		Callable(), 0, _parse_binary, 70, 71
+	),
+	Token.Type.NOT: ParseRule.new(_parse_unary, 60),
+	Token.Type.AND: ParseRule.new(
+		Callable(), 0, _parse_and, 50, 51
+	),
+	Token.Type.OR: ParseRule.new(
+		Callable(), 0, _parse_or, 40, 41
+	),
+}
 
 
 class ParseRule extends RefCounted:
@@ -36,6 +102,18 @@ class ParseRule extends RefCounted:
 		right_bp = p_right_bp
 
 
+class Binding extends RefCounted:
+	## Resolved operand and the instructions which read or update that binding.
+	var index: int
+	var get_opcode: int
+	var set_opcode: int
+
+	func _init(p_index: int, p_get_opcode: int, p_set_opcode: int) -> void:
+		index = p_index
+		get_opcode = p_get_opcode
+		set_opcode = p_set_opcode
+
+
 class Local extends RefCounted:
 	var name: String
 	var depth: int
@@ -47,9 +125,8 @@ class Local extends RefCounted:
 
 
 class Upvalue extends RefCounted:
-	## Tracks the index this upvalue references in enclosing's _upvalues or _locals arrays.
+	## Index into the enclosing compiler's locals or upvalues, selected by is_local.
 	var index_in_enclosing: int
-	## If true, index_in_enclosing references _locals array, otherwise references _upvalues array.
 	var is_local: bool
 
 	func _init(p_index_in_enclosing: int, p_is_local: bool) -> void:
@@ -57,104 +134,40 @@ class Upvalue extends RefCounted:
 		is_local = p_is_local
 
 
-var RULES: Dictionary[int, ParseRule]
-
-# https://www.youtube.com/watch?v=0c8b7YfsBKs
-
 var _tokens: Array[Token] = []
-# TODO: Maybe make this point to the current parsed token instead so we dont' have to keep checking previous.
 ## Index of the current unconsumed token; equals the token count after consuming EOF.
 var _token_index: int = 0
 ## Retained to look up lexemes during compilation using each token's start and length.
 var _source: String
 
-var _function: Function = Function.new()
-## Whether the _function referenced is the script-level function object.
-var _is_script: bool
+var _function: CompiledFunction = CompiledFunction.new()
 
-var _locals: Array[Local] = []
-var _scope_depth := 0
-
+## Null for the script; declared functions reference their enclosing compiler.
 var _enclosing: Compiler
+var _scope_depth: int = 0
+var _locals: Array[Local] = []
 var _upvalues: Array[Upvalue] = []
 
 ## Only the first error is retained; any partial function is discarded on failure.
 var _compile_error: CompileError
 
 
-# TODO: Technically enclosing holds enough info to identify is_script?
 ## Creates a compilation context over source and tokens, starting at the given unconsumed token.
-func _init(p_source: String, p_tokens: Array[Token], p_enclosing: Compiler = null, p_is_script: bool = true, p_token_index: int = 0) -> void:
+func _init(
+	p_source: String,
+	p_tokens: Array[Token],
+	p_enclosing: Compiler = null,
+	p_token_index: int = 0
+) -> void:
 	_source = p_source
 	_tokens = p_tokens
 	_enclosing = p_enclosing
-	_is_script = p_is_script
 	_token_index = p_token_index
 
-	# Need to be assigned in _init because we use Callable which are not compile time assignable.
-	RULES = {
-		Token.Type.NUMBER: ParseRule.new(_parse_number),
-		Token.Type.STRING: ParseRule.new(_parse_string),
-		Token.Type.IDENTIFIER: ParseRule.new(_parse_variable),
-		Token.Type.TRUE: ParseRule.new(_parse_literal),
-		Token.Type.FALSE: ParseRule.new(_parse_literal),
-		Token.Type.NONE: ParseRule.new(_parse_literal),
-		Token.Type.LEFT_PARENTHESES: ParseRule.new(
-			_parse_grouping, 0, _parse_call, 170, 171
-		),
-		Token.Type.LEFT_BRACKET: ParseRule.new(
-			_parse_list, 0, _parse_index, 170, 171
-		),
-		Token.Type.LEFT_BRACE: ParseRule.new(_parse_dictionary),
-		Token.Type.DOT: ParseRule.new(
-			Callable(), 0, _parse_property, 170, 171
-		),
-		Token.Type.PLUS: ParseRule.new(
-			_parse_unary, 140, _parse_binary, 120, 121
-		),
-		Token.Type.MINUS: ParseRule.new(
-			_parse_unary, 140, _parse_binary, 120, 121
-		),
-		Token.Type.ASTERISK: ParseRule.new(
-			Callable(), 0, _parse_binary, 130, 131
-		),
-		Token.Type.SLASH: ParseRule.new(
-			Callable(), 0, _parse_binary, 130, 131
-		),
-		Token.Type.PERCENT: ParseRule.new(
-			Callable(), 0, _parse_binary, 130, 131
-		),
-		Token.Type.EQUAL_EQUAL: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.BANG_EQUAL: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.LESS: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.LESS_EQUAL: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.GREATER: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.GREATER_EQUAL: ParseRule.new(
-			Callable(), 0, _parse_binary, 70, 71
-		),
-		Token.Type.NOT: ParseRule.new(_parse_unary, 60),
-		Token.Type.AND: ParseRule.new(
-			Callable(), 0, _parse_and, 50, 51
-		),
-		Token.Type.OR: ParseRule.new(
-			Callable(), 0, _parse_or, 40, 41
-		),
-	}
 
-
-## Returns a compiled Function or the first CompileError, discarding partial output on failure.
+## Returns a CompiledFunction or the first CompileError, discarding partial output on failure.
 func compile() -> Variant:
-	if _is_script:
+	if _enclosing == null:
 		while _compile_error == null and _current().type != Token.Type.EOF:
 			_parse_declaration()
 	else:
@@ -165,9 +178,9 @@ func compile() -> Variant:
 
 		_end_scope()
 
-	if not _is_script:
-		_emit_byte(OpCode.NONE)
-	_emit_byte(OpCode.RETURN)
+	if _enclosing != null:
+		_emit_instruction(OpCode.NONE)
+	_emit_instruction(OpCode.RETURN)
 
 	if _compile_error != null:
 		return _compile_error
@@ -178,7 +191,7 @@ func compile() -> Variant:
 
 
 ## Parses a variable or function declaration, falling back to a statement.
-func _parse_declaration():
+func _parse_declaration() -> void:
 	if _match(Token.Type.VAR):
 		_parse_variable_declaration()
 	elif _match(Token.Type.DEF):
@@ -189,12 +202,15 @@ func _parse_declaration():
 
 ## Parses 'var name' with an optional initializer, then defines the variable.
 func _parse_variable_declaration() -> void:
-	_consume(Token.Type.IDENTIFIER, "Expect variable name after 'var'.")
+	if not _consume(Token.Type.IDENTIFIER, "Expect variable name after 'var'."):
+		return
 
-	var constant_index: int
+	var constant_index: Variant = null
 	var local_index: Variant = null
 	if _scope_depth == 0:
 		constant_index = _add_constant(_previous_lexeme())
+		if constant_index == null:
+			return
 	else:
 		# Detect duplicate local variables within scope.
 		local_index = _declare_local(_previous_lexeme())
@@ -204,86 +220,94 @@ func _parse_variable_declaration() -> void:
 	if _match(Token.Type.EQUAL):
 		_parse_expression()
 	else:
-		_emit_byte(OpCode.NONE)
+		_emit_instruction(OpCode.NONE)
 
 	_consume(Token.Type.NEWLINE, "Expect newline after variable declaration.")
 
 	if _scope_depth == 0:
-		_emit_byte(OpCode.DEFINE_GLOBAL)
-		_emit_byte(constant_index)
+		_emit_instruction(OpCode.DEFINE_GLOBAL, constant_index)
 	else:
-		_emit_byte(OpCode.DEFINE_LOCAL)
+		_emit_instruction(OpCode.DEFINE_LOCAL)
 		_locals[local_index].is_initialized = true
 
 
-func _parse_function_declaration():
+func _parse_function_declaration() -> void:
 	if not _consume(Token.Type.IDENTIFIER, "Expect function name."):
 		return
 	var function_name := _previous_lexeme()
-	var name_constant_index := _add_constant(function_name)
+	var name_constant_index: Variant = _add_constant(function_name)
+	if name_constant_index == null:
+		return
 
-	# Need to add function to locals before compilation and CLOSURE, such that the closure captures its own name for recursion.
+	# Reserve the binding before compiling the body so local recursion can capture it.
 	var local_index: Variant
 	if _scope_depth > 0:
 		local_index = _declare_local(function_name, true)
 		if local_index == null:
 			return
-		# Register as NONE first as the function isn't compiled yet.
-		_emit_byte(OpCode.NONE)
-		_emit_byte(OpCode.DEFINE_LOCAL)
+		# The closure replaces this temporary null value after compilation.
+		_emit_instruction(OpCode.NONE)
+		_emit_instruction(OpCode.DEFINE_LOCAL)
 
-	var function_compiler := Compiler.new(_source, _tokens, self, false, _token_index)
+	var child_compiler := Compiler.new(_source, _tokens, self, _token_index)
 
-	var compiled: Variant = function_compiler.compile()
-	# Continue where the function compilation left-off.
-	_token_index = function_compiler._token_index
+	var compiled: Variant = child_compiler.compile()
+	# Resume after the nested function's body.
+	_token_index = child_compiler._token_index
 
 	if compiled is CompileError:
 		if _compile_error == null:
 			_compile_error = compiled
 		return
 
-	var function: Function = compiled
+	var function: CompiledFunction = compiled
 	function.name = function_name
 
-	_emit_byte(OpCode.CLOSURE)
-	_emit_byte(_add_constant(function))
+	var function_index: Variant = _add_constant(function)
+	if function_index == null:
+		return
+	_emit_instruction(OpCode.CLOSURE, function_index)
 
-	# Emit pairs of is_local and index.
-	for i in range(function.upvalue_count):
-		_emit_byte(1 if function_compiler._upvalues[i].is_local else 0)
-		_emit_byte(function_compiler._upvalues[i].index_in_enclosing)
+	for upvalue in child_compiler._upvalues:
+		_emit_capture(upvalue.is_local, upvalue.index_in_enclosing)
 
 	if _scope_depth == 0:
-		_emit_byte(OpCode.DEFINE_GLOBAL)
-		_emit_byte(name_constant_index)
+		_emit_instruction(OpCode.DEFINE_GLOBAL, name_constant_index)
 	else:
-		_emit_byte(OpCode.SET_LOCAL)
-		_emit_byte(local_index)
-		_emit_byte(OpCode.POP)
+		_emit_instruction(OpCode.SET_LOCAL, local_index)
+		_emit_instruction(OpCode.POP)
 
 
 ## Parses parameter names and registers them as initialized locals in the function's scope.
 func _parse_parameters() -> void:
 	if not _consume(Token.Type.LEFT_PARENTHESES, "Expect '(' before parameters."):
 		return
-	if _current().type != Token.Type.RIGHT_PARENTHESES:
-		while true:
-			if not _consume(Token.Type.IDENTIFIER, "Expect parameter name."):
-				return
-			var local_index: Variant = _declare_local(_previous_lexeme(), true)
-			if local_index == null:
-				return
-			_function.arity += 1
+	if _match(Token.Type.RIGHT_PARENTHESES):
+		return
 
-			if not _match(Token.Type.COMMA):
-				break
+	while true:
+		if not _consume(Token.Type.IDENTIFIER, "Expect parameter name."):
+			return
+		var local_index: Variant = _declare_local(_previous_lexeme(), true)
+		if local_index == null:
+			return
+		_function.arity += 1
+
+		if not _match(Token.Type.COMMA):
+			break
 
 	_consume(Token.Type.RIGHT_PARENTHESES, "Expect ')' after parameters.")
 
 
-## Scope lifetime is managed outside of _parse_block as function parameters should exist in same scope as its block.
-func _parse_block():
+## Parses a block in a new scope and emits cleanup for its locals.
+func _parse_scoped_block() -> void:
+	_scope_depth += 1
+	_parse_block()
+	_end_scope()
+
+
+## The caller owns scope lifetime so function parameters share their body's scope.
+func _parse_block() -> void:
 	_consume(Token.Type.COLON, "Expect ':' before block.")
 	_consume(Token.Type.NEWLINE, "Expect newline before block.")
 	_consume(Token.Type.INDENT, "Expect indent before block.")
@@ -294,14 +318,7 @@ func _parse_block():
 	_consume(Token.Type.DEDENT, "Expect dedent after block.")
 
 
-## Parses a block in a new scope and emits cleanup for its locals.
-func _parse_scoped_block() -> void:
-	_scope_depth += 1
-	_parse_block()
-	_end_scope()
-
-
-func _parse_statement():
+func _parse_statement() -> void:
 	if _match(Token.Type.IF):
 		_parse_if_statement()
 	elif _match(Token.Type.WHILE):
@@ -316,76 +333,129 @@ func _parse_statement():
 		_parse_expression_statement()
 
 
-func _parse_return_statement():
+## Reassigns one existing variable; chained assignment is rejected.
+func _parse_variable_assignment() -> void:
+	_advance()
+
+	var binding := _resolve_binding(_previous_lexeme())
+	if binding == null:
+		return
+
+	_consume(Token.Type.EQUAL, "Expect '=' after assignment target.")
+	_parse_expression()
+	_consume(Token.Type.NEWLINE, "Expect newline after assignment.")
+
+	_emit_instruction(binding.set_opcode, binding.index)
+	_emit_instruction(OpCode.POP)
+
+
+func _parse_expression_statement() -> void:
+	_parse_expression()
+	_consume(Token.Type.NEWLINE, "Expect newline after expression.")
+	_emit_instruction(OpCode.POP)
+
+
+func _parse_return_statement() -> void:
 	if _match(Token.Type.NEWLINE):
-		_emit_byte(OpCode.NONE)
+		_emit_instruction(OpCode.NONE)
 	else:
 		_parse_expression()
 		_consume(Token.Type.NEWLINE, "Expect newline after return value.")
 
-	_emit_byte(OpCode.RETURN)
+	_emit_instruction(OpCode.RETURN)
 
 
-func _parse_if_statement():
-	_parse_expression()
+func _parse_if_statement() -> void:
+	var end_jumps: Array[int] = []
+	while true:
+		_parse_expression()
+		if _compile_error != null:
+			return
 
-	var if_jump_backpatch_position := _emit_jump(OpCode.JUMP_IF_FALSE)
-	_emit_byte(OpCode.POP)
+		var false_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
+		if false_jump == null:
+			return
+		_emit_instruction(OpCode.POP)
 
-	_parse_scoped_block()
+		_parse_scoped_block()
+		if _compile_error != null:
+			return
 
-	var else_jump_backpatch_position := _emit_jump(OpCode.JUMP)
-	_patch_jump(if_jump_backpatch_position)
-	_emit_byte(OpCode.POP)
+		var end_jump: Variant = _emit_jump(OpCode.JUMP)
+		if end_jump == null:
+			return
+		end_jumps.append(end_jump)
+		_patch_jump(false_jump)
+		_emit_instruction(OpCode.POP)
+
+		if not _match(Token.Type.ELIF):
+			break
 
 	if _match(Token.Type.ELSE):
 		_parse_scoped_block()
-	_patch_jump(else_jump_backpatch_position)
+	for end_jump in end_jumps:
+		_patch_jump(end_jump)
 
 
-func _parse_while_statement():
+func _parse_while_statement() -> void:
 	var loop_start := len(_function.chunk.code)
 	_parse_expression()
 
-	var exit_backpatch_position := _emit_jump(OpCode.JUMP_IF_FALSE)
-	_emit_byte(OpCode.POP)
+	var exit_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
+	if exit_jump == null:
+		return
+	_emit_instruction(OpCode.POP)
 
 	_parse_scoped_block()
 
 	_emit_jump(OpCode.JUMP, loop_start)
 
-	_patch_jump(exit_backpatch_position)
-	_emit_byte(OpCode.POP)
+	_patch_jump(exit_jump)
+	_emit_instruction(OpCode.POP)
 
 
-func _parse_for_statement():
-	# TODO: Allow non declaration in for loop as well.
-	_consume(Token.Type.VAR, "Expected 'var' after 'for'.")
-	_consume(Token.Type.IDENTIFIER, "Expected loop variable.")
+func _parse_for_statement() -> void:
+	var is_counter_declaration := _match(Token.Type.VAR)
+	if not _consume(Token.Type.IDENTIFIER, "Expected loop variable."):
+		return
+	var name := _previous_lexeme()
+	var counter: Binding
+	if not is_counter_declaration:
+		counter = _resolve_binding(name)
+		if counter == null:
+			return
 
 	_scope_depth += 1
-	# No need any duplicate detection checks as this is always the first local in this scope.
-	var name := _previous_lexeme()
-	var counter_local_index: Variant = _declare_local(name)
-	if counter_local_index == null:
-		_end_scope()
-		return
+	# Only declared counters belong to this scope; both forms cache the bound and step.
+	if is_counter_declaration:
+		var local_index: Variant = _declare_local(name)
+		if local_index == null:
+			_end_scope()
+			return
+		counter = Binding.new(local_index, OpCode.GET_LOCAL, OpCode.SET_LOCAL)
 
 	_consume(Token.Type.EQUAL, "Expected '=' after loop variable.")
 	_parse_expression()
-	_emit_byte(OpCode.DEFINE_LOCAL)
-	_locals[counter_local_index].is_initialized = true
+	if _compile_error != null:
+		_end_scope()
+		return
+	if is_counter_declaration:
+		_emit_instruction(OpCode.DEFINE_LOCAL)
+		_locals[counter.index].is_initialized = true
+	else:
+		_emit_instruction(counter.set_opcode, counter.index)
+		_emit_instruction(OpCode.POP)
 
 	_consume(Token.Type.TO, "Expected 'to' after loop initializer.")
 
-	# Evaluate expression once only.
+	# Evaluate and cache the upper bound once.
 	_parse_expression()
-	# Unnammed local is one that user cannot reference.
+	# Anonymous locals cannot be referenced by source names.
 	var end_local_index: Variant = _declare_local("", true)
 	if end_local_index == null:
 		_end_scope()
 		return
-	_emit_byte(OpCode.DEFINE_LOCAL)
+	_emit_instruction(OpCode.DEFINE_LOCAL)
 
 	if _match(Token.Type.STEP):
 		_parse_expression()
@@ -397,81 +467,40 @@ func _parse_for_statement():
 	if step_local_index == null:
 		_end_scope()
 		return
-	_emit_byte(OpCode.DEFINE_LOCAL)
+	_emit_instruction(OpCode.DEFINE_LOCAL)
 
 	var loop_start := len(_function.chunk.code)
 
 	# Check (i - end) * step < 0 at runtime to handle both positive and negative steps.
-	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(counter_local_index)
-	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(end_local_index)
-	_emit_byte(OpCode.SUBTRACT)
-	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(step_local_index)
-	_emit_byte(OpCode.MULTIPLY)
+	_emit_instruction(counter.get_opcode, counter.index)
+	_emit_instruction(OpCode.GET_LOCAL, end_local_index)
+	_emit_instruction(OpCode.SUBTRACT)
+	_emit_instruction(OpCode.GET_LOCAL, step_local_index)
+	_emit_instruction(OpCode.MULTIPLY)
 	_emit_constant(0)
-	_emit_byte(OpCode.LESS)
+	_emit_instruction(OpCode.LESS)
 
-	var exit_backpatch_position := _emit_jump(OpCode.JUMP_IF_FALSE)
-	_emit_byte(OpCode.POP)
+	var exit_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
+	if exit_jump == null:
+		_end_scope()
+		return
+	_emit_instruction(OpCode.POP)
 
 	_parse_scoped_block()
 
 	# Increment counter by step.
-	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(counter_local_index)
-	_emit_byte(OpCode.GET_LOCAL)
-	_emit_byte(step_local_index)
-	_emit_byte(OpCode.ADD)
-	_emit_byte(OpCode.SET_LOCAL)
-	_emit_byte(counter_local_index)
-	_emit_byte(OpCode.POP)
+	_emit_instruction(counter.get_opcode, counter.index)
+	_emit_instruction(OpCode.GET_LOCAL, step_local_index)
+	_emit_instruction(OpCode.ADD)
+	_emit_instruction(counter.set_opcode, counter.index)
+	_emit_instruction(OpCode.POP)
 
 	_emit_jump(OpCode.JUMP, loop_start)
 
-	_patch_jump(exit_backpatch_position)
-	_emit_byte(OpCode.POP)
+	_patch_jump(exit_jump)
+	_emit_instruction(OpCode.POP)
 
 	_end_scope()
-
-
-## Reassigns one existing variable; chained assignment is rejected.
-func _parse_variable_assignment() -> void:
-	_advance()
-
-	var name := _previous_lexeme()
-
-	var set_opcode
-	var operand
-
-	var local_index: Variant = _resolve_local(name)
-	if local_index != null:
-		set_opcode = OpCode.SET_LOCAL
-		operand = local_index
-	else:
-		var upvalue_index: Variant = _resolve_upvalue(name)
-		if upvalue_index != null:
-			set_opcode = OpCode.SET_UPVALUE
-			operand = upvalue_index
-		else:
-			set_opcode = OpCode.SET_GLOBAL
-			operand = _add_constant(name)
-
-	_consume(Token.Type.EQUAL, "Expect '=' after assignment target.")
-	_parse_expression()
-	_consume(Token.Type.NEWLINE, "Expect newline after assignment.")
-
-	_emit_byte(set_opcode)
-	_emit_byte(operand)
-	_emit_byte(OpCode.POP)
-
-
-func _parse_expression_statement():
-	# Parse things like functions.
-	_parse_expression()
-	_consume(Token.Type.NEWLINE, "Expect newline after expression.")
-	_emit_byte(OpCode.POP)
 
 
 ## Parses an expression starting at _current(), using min_bp as its binding power threshold.
@@ -506,30 +535,18 @@ func _parse_string(_min_bp: int) -> void:
 
 func _parse_literal(_min_bp: int) -> void:
 	match _previous().type:
-		Token.Type.TRUE: _emit_byte(OpCode.TRUE)
-		Token.Type.FALSE: _emit_byte(OpCode.FALSE)
-		Token.Type.NONE: _emit_byte(OpCode.NONE)
+		Token.Type.TRUE: _emit_instruction(OpCode.TRUE)
+		Token.Type.FALSE: _emit_instruction(OpCode.FALSE)
+		Token.Type.NONE: _emit_instruction(OpCode.NONE)
 
 
 func _parse_variable(_min_bp: int) -> void:
-	var name := _previous_lexeme()
-
-	var local_index: Variant = _resolve_local(name)
-	if local_index != null:
-		if not _locals[local_index].is_initialized:
-			_error("Cannot read local variable in its own initializer.", _previous())
-		_emit_byte(OpCode.GET_LOCAL)
-		_emit_byte(local_index)
+	var binding := _resolve_binding(_previous_lexeme())
+	if binding == null:
 		return
-
-	var upvalue_index: Variant = _resolve_upvalue(name)
-	if upvalue_index != null:
-		_emit_byte(OpCode.GET_UPVALUE)
-		_emit_byte(upvalue_index)
-		return
-
-	_emit_byte(OpCode.GET_GLOBAL)
-	_emit_byte(_add_constant(name))
+	if binding.get_opcode == OpCode.GET_LOCAL and not _locals[binding.index].is_initialized:
+		_error("Cannot read local variable in its own initializer.", _previous())
+	_emit_instruction(binding.get_opcode, binding.index)
 
 
 ## Parses a parenthesized expression with a fresh binding power threshold and consumes ')'.
@@ -540,11 +557,11 @@ func _parse_grouping(_min_bp: int) -> void:
 
 ## Parses a unary operator's operand at min_bp, then emits the operator's instruction.
 func _parse_unary(min_bp: int) -> void:
-	var operator := _previous().type
+	var operator := _previous()
 	_parse_expression(min_bp)
-	match operator:
-		Token.Type.MINUS: _emit_byte(OpCode.NEGATE)
-		Token.Type.NOT: _emit_byte(OpCode.NOT)
+	match operator.type:
+		Token.Type.MINUS: _emit_instruction(OpCode.NEGATE)
+		Token.Type.NOT: _emit_instruction(OpCode.NOT)
 
 
 ## Parses a binary operator's right operand at min_bp, then emits the operator's instruction.
@@ -552,37 +569,41 @@ func _parse_binary(min_bp: int) -> void:
 	var operator := _previous()
 	_parse_expression(min_bp)
 	match operator.type:
-		Token.Type.PLUS: _emit_byte(OpCode.ADD)
-		Token.Type.MINUS: _emit_byte(OpCode.SUBTRACT)
-		Token.Type.ASTERISK: _emit_byte(OpCode.MULTIPLY)
-		Token.Type.SLASH: _emit_byte(OpCode.DIVIDE)
-		Token.Type.EQUAL_EQUAL: _emit_byte(OpCode.EQUAL)
+		Token.Type.PLUS: _emit_instruction(OpCode.ADD)
+		Token.Type.MINUS: _emit_instruction(OpCode.SUBTRACT)
+		Token.Type.ASTERISK: _emit_instruction(OpCode.MULTIPLY)
+		Token.Type.SLASH: _emit_instruction(OpCode.DIVIDE)
+		Token.Type.EQUAL_EQUAL: _emit_instruction(OpCode.EQUAL)
 		Token.Type.BANG_EQUAL:
-			_emit_byte(OpCode.EQUAL)
-			_emit_byte(OpCode.NOT)
-		Token.Type.GREATER: _emit_byte(OpCode.GREATER)
+			_emit_instruction(OpCode.EQUAL)
+			_emit_instruction(OpCode.NOT)
+		Token.Type.GREATER: _emit_instruction(OpCode.GREATER)
 		Token.Type.GREATER_EQUAL:
-			_emit_byte(OpCode.LESS)
-			_emit_byte(OpCode.NOT)
-		Token.Type.LESS: _emit_byte(OpCode.LESS)
+			_emit_instruction(OpCode.LESS)
+			_emit_instruction(OpCode.NOT)
+		Token.Type.LESS: _emit_instruction(OpCode.LESS)
 		Token.Type.LESS_EQUAL:
-			_emit_byte(OpCode.GREATER)
-			_emit_byte(OpCode.NOT)
+			_emit_instruction(OpCode.GREATER)
+			_emit_instruction(OpCode.NOT)
 		_: _error("Binary operator is not implemented yet.", operator)
 
 
 func _parse_and(min_bp: int) -> void:
-	var backpatch_position := _emit_jump(OpCode.JUMP_IF_FALSE)
-	_emit_byte(OpCode.POP)
+	var end_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
+	if end_jump == null:
+		return
+	_emit_instruction(OpCode.POP)
 	_parse_expression(min_bp)
-	_patch_jump(backpatch_position)
+	_patch_jump(end_jump)
 
 
 func _parse_or(min_bp: int) -> void:
-	var backpatch_position := _emit_jump(OpCode.JUMP_IF_TRUE)
-	_emit_byte(OpCode.POP)
+	var end_jump: Variant = _emit_jump(OpCode.JUMP_IF_TRUE)
+	if end_jump == null:
+		return
+	_emit_instruction(OpCode.POP)
 	_parse_expression(min_bp)
-	_patch_jump(backpatch_position)
+	_patch_jump(end_jump)
 
 
 func _parse_call(_min_bp: int) -> void:
@@ -590,14 +611,18 @@ func _parse_call(_min_bp: int) -> void:
 	if _current().type != Token.Type.RIGHT_PARENTHESES:
 		while true:
 			_parse_expression()
+			if _compile_error != null:
+				return
+			if arg_count == MAX_ARGUMENTS:
+				_error("Can't have more than 255 arguments.", _previous())
+				return
 			arg_count += 1
 
 			if not _match(Token.Type.COMMA):
 				break
 
 	_consume(Token.Type.RIGHT_PARENTHESES, "Expect ')' after arguments.")
-	_emit_byte(OpCode.CALL)
-	_emit_byte(arg_count)
+	_emit_instruction(OpCode.CALL, arg_count)
 
 
 func _parse_index(_min_bp: int) -> void:
@@ -619,7 +644,178 @@ func _parse_dictionary(_min_bp: int) -> void:
 #endregion
 
 
-#region Compiler helpers
+#region Scopes and captures
+
+
+## Registers local metadata without consuming tokens or emitting bytecode; returns its index or null on failure.
+## Empty names identify temporaries; initialized locals can be read immediately.
+func _declare_local(name: String, is_initialized: bool = false) -> Variant:
+	if len(_locals) >= MAX_LOCALS:
+		_error("Too many local variables in function.", _previous())
+		return null
+
+	var existing_local_index: Variant = _resolve_local(name)
+	if existing_local_index != null and _locals[existing_local_index].depth == _scope_depth:
+		_error("Already a variable with this name in this scope.", _previous())
+		return null
+
+	var local := Local.new(name, _scope_depth)
+	local.is_initialized = is_initialized
+	_locals.append(local)
+	return len(_locals) - 1
+
+
+## Resolves access to an existing binding; globals remain late-bound in the VM.
+## Returns null after a capture or constant-pool failure, without emitting instructions.
+func _resolve_binding(name: String) -> Binding:
+	var index: Variant = _resolve_local(name)
+	if index != null:
+		return Binding.new(index, OpCode.GET_LOCAL, OpCode.SET_LOCAL)
+
+	index = _resolve_upvalue(name)
+	if _compile_error != null:
+		return null
+	if index != null:
+		return Binding.new(index, OpCode.GET_UPVALUE, OpCode.SET_UPVALUE)
+
+	index = _add_constant(name)
+	if index == null:
+		return null
+	return Binding.new(index, OpCode.GET_GLOBAL, OpCode.SET_GLOBAL)
+
+
+## Returns the nearest index in _locals, or null if absent; indices address frame cells directly.
+func _resolve_local(name: String) -> Variant:
+	# Anonymous temporaries are accessed only by their allocated indexes.
+	if name == "" or _scope_depth == 0:
+		return null
+
+	for local_index in range(len(_locals) - 1, -1, -1):
+		if _locals[local_index].name == name:
+			return local_index
+	return null
+
+
+## Carries the original reference token through forwarding captures for accurate errors.
+func _resolve_upvalue(name: String, reference: Token = null) -> Variant:
+	if _enclosing == null:
+		return null
+	if reference == null:
+		reference = _previous()
+
+	var enclosing_local: Variant = _enclosing._resolve_local(name)
+	if enclosing_local != null:
+		return _add_upvalue(enclosing_local, true, reference)
+
+	var enclosing_upvalue: Variant = _enclosing._resolve_upvalue(name, reference)
+	if _enclosing._compile_error != null:
+		if _compile_error == null:
+			_compile_error = _enclosing._compile_error
+		return null
+	if enclosing_upvalue != null:
+		return _add_upvalue(enclosing_upvalue, false, reference)
+
+	return null
+
+
+## Returns a capture index, or null on overflow; existing captures remain reusable at capacity.
+func _add_upvalue(index: int, is_local: bool, reference: Token = null) -> Variant:
+	for i in range(len(_upvalues)):
+		var upvalue := _upvalues[i]
+		if upvalue.index_in_enclosing == index and upvalue.is_local == is_local:
+			return i
+	if len(_upvalues) >= MAX_UPVALUES:
+		_error("Too many closure variables in function.", reference)
+		return null
+	_upvalues.append(Upvalue.new(index, is_local))
+	_function.upvalue_count = len(_upvalues)
+	return _function.upvalue_count - 1
+
+
+func _end_scope() -> void:
+	_scope_depth -= 1
+	# Remove local cells belonging to the scope being exited.
+	while not _locals.is_empty() and _locals[-1].depth > _scope_depth:
+		_emit_instruction(OpCode.POP_LOCAL)
+		_locals.pop_back()
+
+
+#endregion
+
+
+#region Bytecode emission
+
+
+## Emits an opcode and its optional one-byte operand, including operand zero.
+func _emit_instruction(opcode: int, operand: Variant = null) -> void:
+	_emit_byte(opcode)
+	if operand != null:
+		_emit_byte(operand)
+
+
+## Adds a constant and emits the instruction that pushes its value onto the stack.
+func _emit_constant(value: Variant) -> void:
+	var constant_index: Variant = _add_constant(value)
+	if constant_index == null:
+		return
+	_emit_instruction(OpCode.CONSTANT, constant_index)
+
+
+## Encodes a closure capture descriptor.
+func _emit_capture(is_local: bool, index: int) -> void:
+	_emit_byte(1 if is_local else 0)
+	_emit_byte(index)
+
+
+## Returns the jump operand's position, or null on overflow without writing any bytes.
+## An omitted target emits a zero placeholder for _patch_jump(); target zero is valid.
+func _emit_jump(instruction: int, target: Variant = null) -> Variant:
+	var operand_position := len(_function.chunk.code) + 1
+	var offset := 0
+	if target != null:
+		offset = int(target) - operand_position - 2
+
+	if offset < MIN_JUMP_OFFSET or offset > MAX_JUMP_OFFSET:
+		_error("Jump offset must be between -32768 and 32767.", _previous())
+		return null
+
+	_emit_byte(instruction)
+	_emit_byte((offset >> 8) & 0xff)
+	_emit_byte(offset & 0xff)
+	return operand_position
+
+
+## Backpatch a jump instruction's operand to the current bytecode location.
+## Should be paired with _emit_jump.
+func _patch_jump(operand_position: int) -> void:
+	var offset := len(_function.chunk.code) - operand_position - 2
+	if offset < MIN_JUMP_OFFSET or offset > MAX_JUMP_OFFSET:
+		_error("Jump offset must be between -32768 and 32767.", _previous())
+		return
+	_function.chunk.code[operand_position] = (offset >> 8) & 0xff
+	_function.chunk.code[operand_position + 1] = offset & 0xff
+
+
+## Returns a one-byte constant index, or null on overflow without changing the pool.
+func _add_constant(value: Variant) -> Variant:
+	if len(_function.chunk.constants) >= MAX_CONSTANTS:
+		_error("Too many constants in one function.", _previous())
+		return null
+	return _function.chunk.add_constant(value)
+
+
+## Emits a byte, using the current token's line if nothing has been consumed yet.
+func _emit_byte(byte: int) -> void:
+	var token := _previous()
+	if token == null:
+		token = _current()
+	_function.chunk.append(byte, token.line)
+
+
+#endregion
+
+
+#region Parser helpers
 
 
 ## Returns the current unconsumed token, or EOF after the token list is exhausted.
@@ -627,17 +823,17 @@ func _current() -> Token:
 	return _peek(0)
 
 
+## Returns the token offset positions after _current() without advancing, or EOF past the end.
+func _peek(offset: int = 1) -> Token:
+	assert(offset >= 0, "Lookahead offset must be nonnegative.")
+	return _tokens[mini(_token_index + offset, len(_tokens) - 1)]
+
+
 ## Returns the last consumed token, or null if no token has been consumed.
 func _previous() -> Token:
 	if _token_index == 0:
 		return null
 	return _tokens[_token_index - 1]
-
-
-## Returns the token offset positions after _current() without advancing, or EOF past the end.
-func _peek(offset: int = 1) -> Token:
-	assert(offset >= 0, "Lookahead offset must be nonnegative.")
-	return _tokens[mini(_token_index + offset, len(_tokens) - 1)]
 
 
 ## Returns the source text covered by the last consumed token.
@@ -667,124 +863,6 @@ func _consume(type: Token.Type, message_if_invalid: String) -> bool:
 
 	_error(message_if_invalid)
 	return false
-
-
-## Returns the nearest index in _locals, or null if absent; indices address frame cells directly.
-func _resolve_local(name: String) -> Variant:
-	# Unnamed locals are referenced purely via index received at creation. Their lifecycle is managed by VM.
-	if name == "" or _scope_depth == 0:
-		return null
-
-	for local_index in range(len(_locals) - 1, -1, -1):
-		if _locals[local_index].name == name:
-			return local_index
-	return null
-
-
-func _resolve_upvalue(name: String) -> Variant:
-	if _enclosing == null:
-		return null
-
-	var enclosing_local: Variant = _enclosing._resolve_local(name)
-	if enclosing_local != null:
-		return _add_upvalue(enclosing_local, true)
-
-	var enclosing_upvalue: Variant = _enclosing._resolve_upvalue(name)
-	if enclosing_upvalue != null:
-		return _add_upvalue(enclosing_upvalue, false)
-
-	return null
-
-
-## Attempts to add an upvalue to _upvalues array and returns index; returns existing index instead if found.
-func _add_upvalue(index: int, is_local: bool) -> int:
-	# Don't recreate an upvalue if it already exists with same index and is_local
-	for i in range(len(_upvalues)):
-		if _upvalues[i].index_in_enclosing == index and _upvalues[i].is_local == is_local:
-			return i
-	_upvalues.append(Upvalue.new(index, is_local))
-	# This count should always match the length of _upvalues array.
-	_function.upvalue_count += 1
-	return _function.upvalue_count - 1
-
-
-## Registers local metadata without consuming tokens or emitting bytecode; returns its index or null on failure.
-## Empty names identify temporaries; initialized locals can be read immediately.
-func _declare_local(name: String, is_initialized: bool = false) -> Variant:
-	if len(_locals) >= 255:
-		_error("Too many local variables in function.", _previous())
-		return null
-
-	var existing_local_index: Variant = _resolve_local(name)
-	if existing_local_index != null and _locals[existing_local_index].depth == _scope_depth:
-		_error("Already a variable with this name in this scope.", _previous())
-		return null
-
-	var local := Local.new(name, _scope_depth)
-	local.is_initialized = is_initialized
-	_locals.append(local)
-	return len(_locals) - 1
-
-
-func _end_scope() -> void:
-	_scope_depth -= 1
-	# Remove local cells belonging to the scope being exited.
-	while len(_locals) > 0 and _locals[-1].depth > _scope_depth:
-		_emit_byte(OpCode.POP_LOCAL)
-		_locals.pop_back()
-
-
-## Adds a constant that can be addressed by a one-byte operand.
-func _add_constant(value: Variant) -> int:
-	if len(_function.chunk.constants) >= 256:
-		_error("Too many constants in one function.", _previous())
-		return 0
-	return _function.chunk.add_constant(value)
-
-
-## Emits a byte, using the current token's line if nothing has been consumed yet.
-func _emit_byte(byte: int) -> void:
-	var token := _previous()
-	if token == null:
-		token = _current()
-	_function.chunk.append(byte, token.line)
-
-
-## Adds a constant and emits the instruction that pushes its value onto the stack.
-func _emit_constant(value: Variant) -> void:
-	var constant_index := _add_constant(value)
-	_emit_byte(OpCode.CONSTANT)
-	_emit_byte(constant_index)
-
-
-## Emits a jump to an absolute bytecode position.
-## If target is omitted, emits a placeholder for backpatching; in which case should be paired with _patch_jump.
-func _emit_jump(instruction: int, target: Variant = null) -> int:
-	var operand_position := len(_function.chunk.code) + 1
-	# If target is not provided, this will just be garbage, expected to be backpatched over.
-	var offset := 0
-	if target != null:
-		offset = int(target) - operand_position - 2
-
-	_emit_byte(instruction)
-	# TODO: Still return int? Or return null or the error contract is consistent.
-	if offset < MIN_JUMP_OFFSET or offset > MAX_JUMP_OFFSET:
-		_error("Jump offset must be between -32768 and 32767.", _previous())
-
-	_emit_byte((offset >> 8) & 0xff)
-	_emit_byte(offset & 0xff)
-	return operand_position
-
-
-## Backpatch a jump instruction's operand to the current bytecode location.
-## Should be paired with _emit_jump.
-func _patch_jump(operand_position: int) -> void:
-	var offset := len(_function.chunk.code) - operand_position - 2
-	if offset < MIN_JUMP_OFFSET or offset > MAX_JUMP_OFFSET:
-		_error("Jump offset must be between -32768 and 32767.", _previous())
-		return
-	_function.chunk.code[operand_position] = (offset >> 8) & 0xff
-	_function.chunk.code[operand_position + 1] = offset & 0xff
 
 
 ## Retains the first diagnostic; active handlers may finish, but their output is discarded.

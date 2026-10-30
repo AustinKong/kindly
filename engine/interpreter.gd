@@ -1,7 +1,7 @@
 class_name Interpreter
 extends RefCounted
 
-const VirtualMachine = preload("res://engine/runtime/vm/virtual_machine.gd")
+const VirtualMachine = preload("res://engine/virtual_machine/virtual_machine.gd")
 const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
 const Lexer = preload("res://engine/frontend/lexer/lexer.gd")
 const ScanError = preload("res://engine/frontend/lexer/scan_error.gd")
