@@ -18,6 +18,8 @@ const INSTRUCTION_LIMIT: int = 1000000
 var _stack: Array = []
 var _call_stack: Array[CallFrame] = []
 var _globals: Dictionary = {}
+## Track closures to break cycles formed by Closure <-> Cell that Godot cannot free via ref counting.
+var _closures: Array[WeakRef] = []
 
 
 ## Registers a host callable in the same global namespace as script bindings.
@@ -25,9 +27,18 @@ func define_native_function(name: String, callable: Callable) -> void:
 	_globals[name] = NativeFunction.new(name, callable)
 
 
-## Executes a function, returning null on success or a RuntimeError on failure.
+## Executes a function and disposes the session on success or runtime failure.
+## Returns null or a RuntimeError whose diagnostic data survives disposal.
 func interpret(function: CompiledFunction) -> RuntimeError:
-	_call_stack.append(CallFrame.new(Closure.new(function)))
+	var error := _execute(function)
+	_dispose()
+	return error
+
+
+func _execute(function: CompiledFunction) -> RuntimeError:
+	var entry := Closure.new(function)
+	_closures.append(weakref(entry))
+	_call_stack.append(CallFrame.new(entry))
 	var remaining_instructions := INSTRUCTION_LIMIT
 
 	while true:
@@ -105,6 +116,7 @@ func interpret(function: CompiledFunction) -> RuntimeError:
 			OpCode.CLOSURE:
 				var closure_function: CompiledFunction = _read_constant()
 				var closure := Closure.new(closure_function)
+				_closures.append(weakref(closure))
 
 				for i in range(closure_function.upvalue_count):
 					var is_local := _read_byte() == 1
@@ -172,6 +184,18 @@ func interpret(function: CompiledFunction) -> RuntimeError:
 				_stack.push_back(result)
 
 	return null
+
+
+## Ends the session, invalidating its closures and releasing captured reference cycles.
+func _dispose() -> void:
+	for reference in _closures:
+		var closure: Closure = reference.get_ref()
+		if closure != null:
+			closure.upvalues.clear()
+	_closures.clear()
+	_globals.clear()
+	_stack.clear()
+	_call_stack.clear()
 
 
 #region Instruction decoding

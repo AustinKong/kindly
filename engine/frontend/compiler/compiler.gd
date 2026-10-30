@@ -525,7 +525,20 @@ func _parse_expression(min_bp: int = 0) -> void:
 
 
 func _parse_number(_min_bp: int) -> void:
-	_emit_constant(_previous_lexeme().to_float())
+	var lexeme := _previous_lexeme()
+	if lexeme.contains("."):
+		var value := lexeme.to_float()
+		if not is_finite(value):
+			_error("Float literal is out of range.", _previous())
+			return
+		_emit_constant(value)
+	else:
+		# Check decimal digits before conversion: Godot can wrap or clamp overflowing integers.
+		var digits := lexeme.lstrip("0")
+		if len(digits) > 19 or (len(digits) == 19 and digits > "9223372036854775807"):
+			_error("Integer literal is out of range.", _previous())
+			return
+		_emit_constant(lexeme.to_int())
 
 
 func _parse_string(_min_bp: int) -> void:
@@ -798,6 +811,14 @@ func _patch_jump(operand_position: int) -> void:
 
 ## Returns a one-byte constant index, or null on overflow without changing the pool.
 func _add_constant(value: Variant) -> Variant:
+	# Don't dedupe functions as we need to figure out semantics of whether a function equals another.
+	if typeof(value) in [TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+		# The pool is small; profile before adding a reverse-lookup dictionary if it grows.
+		for i in range(len(_function.chunk.constants)):
+			var existing: Variant = _function.chunk.constants[i]
+			if typeof(existing) == typeof(value) and existing == value:
+				return i
+
 	if len(_function.chunk.constants) >= MAX_CONSTANTS:
 		_error("Too many constants in one function.", _previous())
 		return null

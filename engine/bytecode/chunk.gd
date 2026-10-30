@@ -11,7 +11,6 @@ func append(byte: int, line: int) -> void:
 	lines.append(line)
 
 
-# TODO: Dedupe immutable constants as variable declarations and assignments both add_constant.
 ## Adds a constant and returns its index.
 func add_constant(value: Variant) -> int:
 	constants.append(value)
