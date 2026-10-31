@@ -6,9 +6,7 @@ const SessionHeap = preload("res://engine/virtual_machine/session_heap.gd")
 
 static func register(vm) -> void:
 	vm.define_native_function("insert", _insert)
-	vm.define_native_function("remove", _remove)
 	vm.define_native_function("index", _index)
-	vm.define_native_function("copy", _copy.bind(vm.heap))
 	vm.define_native_function("reverse", _reverse)
 	vm.define_native_function("sort", _sort)
 

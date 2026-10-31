@@ -196,6 +196,20 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 					list.append(_stack.pop_back())
 				list.reverse()
 				_stack.push_back(list)
+			OpCode.BUILD_DICT:
+				var entry_count := _read_byte()
+				var dictionary := heap.new_dictionary({})
+				var entries_start := _stack.size() - entry_count * 2
+				# Insert in source order so later duplicate keys replace earlier values.
+				for i in range(entry_count):
+					var key: Variant = _stack[entries_start + i * 2]
+					var error := _validate_dictionary_key(key)
+					if error != null:
+						return error
+					dictionary[key] = _stack[entries_start + i * 2 + 1]
+
+				_stack.resize(entries_start)
+				_stack.push_back(dictionary)
 			OpCode.GET_SUBSCRIPT:
 				var index_in_list: Variant = _stack.pop_back()
 				var list: Variant = _stack.pop_back()
@@ -207,7 +221,7 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				var value: Variant = _stack.pop_back()
 				var index_in_list: Variant = _stack.pop_back()
 				var list: Variant = _stack.pop_back()
-				var error := _validate_subscript(list, index_in_list)
+				var error := _validate_subscript(list, index_in_list, true)
 				if error != null:
 					return error
 				if list is CircularBuffer:
@@ -260,20 +274,33 @@ func _read_constant() -> Variant:
 #region Runtime helpers
 
 
-func _validate_subscript(list: Variant, index: Variant) -> RuntimeError:
-	if not (list is Array or list is CircularBuffer):
-		return _runtime_error("Only lists or deques can be subscripted.")
-	var kind := "Deque" if list is CircularBuffer else "List"
+func _validate_subscript(data_structure: Variant, index: Variant, for_assignment: bool = false) -> RuntimeError:
+	if data_structure is Dictionary:
+		var error := _validate_dictionary_key(index)
+		if error != null:
+			return error
+		if not for_assignment and not data_structure.has(index):
+			return _runtime_error("Dictionary key not found.")
+		return null
+	if not (data_structure is Array or data_structure is CircularBuffer):
+		return _runtime_error("Only lists, deques, or dictionaries can be subscripted.")
+	var kind := "Deque" if data_structure is CircularBuffer else "List"
 	if typeof(index) != TYPE_INT:
 		return _runtime_error("%s index must be an integer." % kind)
 	# Preserve Godot's negative indexing: -1 selects the final element.
-	if index < -list.size() or index >= list.size():
+	if index < -data_structure.size() or index >= data_structure.size():
 		return _runtime_error("%s index out of bounds." % kind)
 	return null
 
 
+func _validate_dictionary_key(key: Variant) -> RuntimeError:
+	if typeof(key) not in [TYPE_NIL, TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING]:
+		return _runtime_error("Dictionary keys must be strings, numbers, booleans, or None.")
+	return null
+
+
 func _is_falsy(value: Variant) -> bool:
-	if value is CircularBuffer:
+	if value is Array or value is Dictionary or value is CircularBuffer:
 		return value.is_empty()
 	return not bool(value)
 

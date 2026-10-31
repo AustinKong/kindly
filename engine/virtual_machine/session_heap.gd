@@ -17,6 +17,11 @@ func new_list(items: Array) -> Array:
 	return items
 
 
+func new_dictionary(items: Dictionary) -> Dictionary:
+	_allocations.append(items)
+	return items
+
+
 func new_closure(function: CompiledFunction) -> Closure:
 	var closure := Closure.new(function)
 	_allocations.append(closure)
@@ -33,9 +38,7 @@ func new_circular_buffer(items: Array) -> CircularBuffer:
 
 func clear() -> void:
 	for value in _allocations:
-		if value is Array:
-			value.clear()
-		elif value is CircularBuffer:
+		if value is Array or value is Dictionary or value is CircularBuffer:
 			value.clear()
 		elif value is Closure:
 			value.upvalues.clear()

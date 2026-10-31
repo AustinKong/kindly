@@ -13,6 +13,7 @@ const MAX_LOCALS: int = 255
 const MAX_CONSTANTS: int = 256
 const MAX_ARGUMENTS: int = 255
 const MAX_LIST_ELEMENTS: int = 255
+const MAX_DICTIONARY_ENTRIES: int = 255
 const MAX_UPVALUES: int = 256
 const MIN_JUMP_OFFSET: int = -0x8000
 const MAX_JUMP_OFFSET: int = 0x7fff
@@ -686,7 +687,26 @@ func _parse_list(_min_bp: int, _can_assign: bool) -> void:
 
 
 func _parse_dictionary(_min_bp: int, _can_assign: bool) -> void:
-	_error("Dictionary literals are not implemented yet.", _previous())
+	var count := 0
+	if _current().type != Token.Type.RIGHT_BRACE:
+		while _compile_error == null:
+			if count == MAX_DICTIONARY_ENTRIES:
+				_error("Can't have more than 255 dictionary entries.")
+				return
+
+			_parse_expression()
+			if not _consume(Token.Type.COLON, "Expect ':' after dictionary key."):
+				return
+
+			_parse_expression()
+			count += 1
+
+			# Allows trailing commas.
+			if not _match(Token.Type.COMMA) or _current().type == Token.Type.RIGHT_BRACE:
+				break
+
+	_consume(Token.Type.RIGHT_BRACE, "Expect '}' after dictionary.")
+	_emit_instruction(OpCode.BUILD_DICT, count)
 
 
 #endregion
