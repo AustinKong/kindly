@@ -138,6 +138,15 @@ class Upvalue extends RefCounted:
 		is_local = p_is_local
 
 
+class Loop extends RefCounted:
+	var scope_depth: int
+	var break_jumps: Array[int] = []
+	var continue_jumps: Array[int] = []
+
+	func _init(p_scope_depth: int) -> void:
+		scope_depth = p_scope_depth
+
+
 var _tokens: Array[Token] = []
 ## Index of the current unconsumed token; equals the token count after consuming EOF.
 var _token_index: int = 0
@@ -151,6 +160,7 @@ var _enclosing: Compiler
 var _scope_depth: int = 0
 var _locals: Array[Local] = []
 var _upvalues: Array[Upvalue] = []
+var _loops: Array[Loop] = []
 
 ## Only the first error is retained; any partial function is discarded on failure.
 var _compile_error: CompileError
@@ -353,6 +363,8 @@ func _parse_statement() -> void:
 		_parse_for_statement()
 	elif _match(Token.Type.RETURN):
 		_parse_return_statement()
+	elif _match(Token.Type.BREAK) or _match(Token.Type.CONTINUE):
+		_parse_loop_jump()
 	else:
 		_parse_expression_statement()
 
@@ -371,6 +383,27 @@ func _parse_return_statement() -> void:
 		_consume(Token.Type.NEWLINE, "Expect newline after return value.")
 
 	_emit_instruction(OpCode.RETURN)
+
+
+func _parse_loop_jump() -> void:
+	var keyword := _previous()
+	var is_break := keyword.type == Token.Type.BREAK
+	var name := "break" if is_break else "continue"
+	if _loops.is_empty():
+		_error("Cannot use '%s' outside a loop." % name, keyword)
+		return
+	if not _consume(Token.Type.NEWLINE, "Expect newline after '%s'." % name):
+		return
+
+	var loop := _loops[-1]
+	# Cleanup runtime local variables via POP_LOCAL. But do not cleanup _locals array tracked by compiler, to not interfere.
+	_emit_scope_cleanup(loop.scope_depth)
+	var jump: Variant = _emit_jump(OpCode.JUMP)
+	if jump != null:
+		if is_break:
+			loop.break_jumps.append(jump)
+		else:
+			loop.continue_jumps.append(jump)
 
 
 func _parse_if_statement() -> void:
@@ -410,12 +443,19 @@ func _parse_while_statement() -> void:
 		return
 	_emit_instruction(OpCode.POP)
 
+	var loop := Loop.new(_scope_depth)
+	_loops.append(loop)
 	_parse_scoped_block()
+	_loops.pop_back()
 
+	for jump in loop.continue_jumps:
+		_patch_jump(jump)
 	_emit_jump(OpCode.JUMP, loop_start)
 
 	_patch_jump(exit_jump)
 	_emit_instruction(OpCode.POP)
+	for jump in loop.break_jumps:
+		_patch_jump(jump)
 
 
 func _parse_for_statement() -> void:
@@ -490,8 +530,14 @@ func _parse_for_statement() -> void:
 		return
 	_emit_instruction(OpCode.POP)
 
+	var loop := Loop.new(_scope_depth)
+	_loops.append(loop)
 	_parse_scoped_block()
+	_loops.pop_back()
 
+	# Continue still increments the counter.
+	for jump in loop.continue_jumps:
+		_patch_jump(jump)
 	# Increment counter by step.
 	_emit_instruction(counter.get_opcode, counter.index)
 	_emit_instruction(OpCode.GET_LOCAL, step_local_index)
@@ -504,6 +550,9 @@ func _parse_for_statement() -> void:
 	_patch_jump(exit_jump)
 	_emit_instruction(OpCode.POP)
 
+	# Both break and normal exit release the counter and cached range locals.
+	for jump in loop.break_jumps:
+		_patch_jump(jump)
 	_end_scope()
 
 
@@ -603,6 +652,7 @@ func _parse_binary(min_bp: int, _can_assign: bool) -> void:
 		Token.Type.MINUS: _emit_instruction(OpCode.SUBTRACT)
 		Token.Type.ASTERISK: _emit_instruction(OpCode.MULTIPLY)
 		Token.Type.SLASH: _emit_instruction(OpCode.DIVIDE)
+		Token.Type.PERCENT: _emit_instruction(OpCode.MODULO)
 		Token.Type.EQUAL_EQUAL: _emit_instruction(OpCode.EQUAL)
 		Token.Type.BANG_EQUAL:
 			_emit_instruction(OpCode.EQUAL)
@@ -800,11 +850,20 @@ func _add_upvalue(index: int, is_local: bool, ref: Token = null) -> Variant:
 	return _function.upvalue_count - 1
 
 
+## Emits runtime cleanup without changing the compiler's lexical scope.
+func _emit_scope_cleanup(target_depth: int) -> void:
+	for i in range(_locals.size() - 1, -1, -1):
+		if _locals[i].depth <= target_depth:
+			break
+		_emit_instruction(OpCode.POP_LOCAL)
+
+
 func _end_scope() -> void:
 	_scope_depth -= 1
-	# Remove local cells belonging to the scope being exited.
+	# Runtime cleanup via POP_LOCAL.
+	_emit_scope_cleanup(_scope_depth)
+	# Compiler _locals tracking cleanup.
 	while not _locals.is_empty() and _locals[-1].depth > _scope_depth:
-		_emit_instruction(OpCode.POP_LOCAL)
 		_locals.pop_back()
 
 

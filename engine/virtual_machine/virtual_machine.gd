@@ -76,7 +76,7 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				else:
 					return _runtime_error("Incompatible operands.")
 			# Numeric-only binary operators.
-			OpCode.SUBTRACT, OpCode.MULTIPLY, OpCode.DIVIDE, OpCode.GREATER, OpCode.LESS:
+			OpCode.SUBTRACT, OpCode.MULTIPLY, OpCode.DIVIDE, OpCode.MODULO, OpCode.GREATER, OpCode.LESS:
 				var right: Variant = _stack.pop_back()
 				var left: Variant = _stack.pop_back()
 				if typeof(left) not in NUMBER_TYPES or typeof(right) not in NUMBER_TYPES:
@@ -86,6 +86,17 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 					OpCode.SUBTRACT: _stack.push_back(left - right)
 					OpCode.MULTIPLY: _stack.push_back(left * right)
 					OpCode.DIVIDE: _stack.push_back(float(left) / float(right))
+					OpCode.MODULO:
+						if right == 0:
+							return _runtime_error("Modulo divisor must not be zero.")
+						# Truncated remainder keeps the dividend's sign.
+						var remainder: Variant
+						if typeof(left) == TYPE_INT and typeof(right) == TYPE_INT:
+							# Avoid signed integer overflow for INT64_MIN % -1.
+							remainder = 0 if right == -1 else left % right
+						else:
+							remainder = fmod(float(left), float(right))
+						_stack.push_back(remainder)
 					OpCode.GREATER: _stack.push_back(left > right)
 					OpCode.LESS: _stack.push_back(left < right)
 			OpCode.EQUAL:
@@ -282,13 +293,16 @@ func _validate_subscript(data_structure: Variant, index: Variant, for_assignment
 		if not for_assignment and not data_structure.has(index):
 			return _runtime_error("Dictionary key not found.")
 		return null
-	if not (data_structure is Array or data_structure is CircularBuffer):
-		return _runtime_error("Only lists, deques, or dictionaries can be subscripted.")
-	var kind := "Deque" if data_structure is CircularBuffer else "List"
+	if data_structure is String and for_assignment:
+		return _runtime_error("Strings do not support subscript assignment.")
+	if not (data_structure is Array or data_structure is CircularBuffer or data_structure is String):
+		return _runtime_error("Only lists, deques, dictionaries, or strings can be subscripted.")
+	var kind := "String" if data_structure is String else ("Deque" if data_structure is CircularBuffer else "List")
 	if typeof(index) != TYPE_INT:
 		return _runtime_error("%s index must be an integer." % kind)
 	# Preserve Godot's negative indexing: -1 selects the final element.
-	if index < -data_structure.size() or index >= data_structure.size():
+	var size: int = data_structure.length() if data_structure is String else data_structure.size()
+	if index < -size or index >= size:
 		return _runtime_error("%s index out of bounds." % kind)
 	return null
 

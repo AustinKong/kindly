@@ -5,6 +5,7 @@ const CollectionLibrary = preload("res://engine/standard_library/collection_libr
 const DequeLibrary = preload("res://engine/standard_library/deque_library.gd")
 const PrintLibrary = preload("res://engine/standard_library/print_library.gd")
 const DictionaryLibrary = preload("res://engine/standard_library/dictionary_library.gd")
+const SequenceLibrary = preload("res://engine/standard_library/sequence_library.gd")
 
 
 ## Registers standard functions in a fresh VM's global namespace.
@@ -13,4 +14,5 @@ static func register(vm, output: Callable = Callable()) -> void:
 	CollectionLibrary.register(vm)
 	DequeLibrary.register(vm)
 	DictionaryLibrary.register(vm)
+	SequenceLibrary.register(vm)
 	PrintLibrary.register(vm, output)

@@ -22,9 +22,10 @@ static func register(vm) -> void:
 
 
 static func _length(collection: Variant) -> Variant:
-	var error := _require_collection(collection, "len")
-	if error != null:
-		return error
+	if collection is String:
+		return collection.length()
+	if not (collection is Array or collection is Buffer or collection is Dictionary):
+		return RuntimeError.new("len() first argument must be a list, deque, dictionary, or string.", -1)
 	return collection.size()
 
 

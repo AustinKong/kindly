@@ -9,6 +9,8 @@ const ScanError = preload("res://engine/frontend/lexer/scan_error.gd")
 
 static var KEYWORD_TRIE: Trie = Trie.new({
 	"and": Token.Type.AND,
+	"break": Token.Type.BREAK,
+	"continue": Token.Type.CONTINUE,
 	"def": Token.Type.DEF,
 	"elif": Token.Type.ELIF,
 	"else": Token.Type.ELSE,
