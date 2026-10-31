@@ -316,7 +316,7 @@ func _validate_dictionary_key(key: Variant) -> RuntimeError:
 func _is_falsy(value: Variant) -> bool:
 	if value is Array or value is Dictionary or value is CircularBuffer:
 		return value.is_empty()
-	return not bool(value)
+	return not value
 
 
 func _is_truthy(value: Variant) -> bool:
