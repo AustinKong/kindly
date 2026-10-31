@@ -23,9 +23,10 @@ var _globals: Dictionary = {}
 var heap := SessionHeap.new()
 
 
-## Registers a host callable in the same global namespace as script bindings.
-func define_native_function(name: String, callable: Callable) -> void:
-	_globals[name] = NativeFunction.new(name, callable)
+## Registers one callable and argument range, replacing any previous binding.
+## Omitted bounds infer a fixed count from the callable's unbound arguments.
+func define_native_function(name: String, callable: Callable, min_arity: int = -1, max_arity: int = -1) -> void:
+	_globals[name] = NativeFunction.new(name, callable, min_arity, max_arity)
 
 
 ## Executes a function and disposes the session on success or runtime failure.
@@ -55,6 +56,8 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 			OpCode.FALSE: _stack.push_back(false)
 			OpCode.NONE: _stack.push_back(null)
 			OpCode.POP: _stack.pop_back()
+			OpCode.ARGUMENT_COUNT:
+				_stack.push_back(_current_frame().argument_count)
 			# Unary and binary operations.
 			OpCode.NEGATE:
 				if typeof(_stack.back()) not in NUMBER_TYPES:
@@ -153,9 +156,12 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				if not (callee is Closure or callee is NativeFunction):
 					return _runtime_error("Only functions can be called.")
 
-				var expected_arity: int = callee.function.arity if callee is Closure else callee.arity
-				if arg_count != expected_arity:
-					return _runtime_error("Expected %d arguments but got %d." % [expected_arity, arg_count])
+				var target: Variant = callee.function if callee is Closure else callee
+				if arg_count < target.min_arity or arg_count > target.max_arity:
+					if target.min_arity == target.max_arity:
+						return _runtime_error("Expected %d arguments but got %d." % [target.max_arity, arg_count])
+					return _runtime_error("Expected %d to %d arguments but got %d." % [target.min_arity, target.max_arity, arg_count])
+
 				if callee is Closure and len(_call_stack) >= MAX_CALL_STACK_SIZE:
 					return _runtime_error("Stack overflow.")
 
@@ -163,7 +169,7 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				# With zero arguments, slice(-arg_count) becomes slice(0) and copies the entire stack.
 				var args := _stack.slice(callee_index + 1)
 				if callee is Closure:
-					var frame := CallFrame.new(callee)
+					var frame := CallFrame.new(callee, arg_count)
 					for argument in args:
 						frame.locals.append(Cell.new(argument))
 					_call_stack.append(frame)
@@ -196,7 +202,7 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				var error := _validate_subscript(list, index_in_list)
 				if error != null:
 					return error
-				_stack.push_back(list[index_in_list])
+				_stack.push_back(list.at(index_in_list) if list is CircularBuffer else list[index_in_list])
 			OpCode.SET_SUBSCRIPT:
 				var value: Variant = _stack.pop_back()
 				var index_in_list: Variant = _stack.pop_back()
@@ -204,7 +210,10 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				var error := _validate_subscript(list, index_in_list)
 				if error != null:
 					return error
-				list[index_in_list] = value
+				if list is CircularBuffer:
+					list.set_at(index_in_list, value)
+				else:
+					list[index_in_list] = value
 				_stack.push_back(value)
 
 
@@ -252,17 +261,20 @@ func _read_constant() -> Variant:
 
 
 func _validate_subscript(list: Variant, index: Variant) -> RuntimeError:
-	if not list is Array:
-		return _runtime_error("Only lists can be subscripted.")
+	if not (list is Array or list is CircularBuffer):
+		return _runtime_error("Only lists or deques can be subscripted.")
+	var kind := "Deque" if list is CircularBuffer else "List"
 	if typeof(index) != TYPE_INT:
-		return _runtime_error("List index must be an integer.")
+		return _runtime_error("%s index must be an integer." % kind)
 	# Preserve Godot's negative indexing: -1 selects the final element.
 	if index < -list.size() or index >= list.size():
-		return _runtime_error("List index out of bounds.")
+		return _runtime_error("%s index out of bounds." % kind)
 	return null
 
 
 func _is_falsy(value: Variant) -> bool:
+	if value is CircularBuffer:
+		return value.is_empty()
 	return not bool(value)
 
 

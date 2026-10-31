@@ -5,42 +5,12 @@ const SessionHeap = preload("res://engine/virtual_machine/session_heap.gd")
 
 
 static func register(vm) -> void:
-	vm.define_native_function("len", _length)
-	vm.define_native_function("append", _append)
-	vm.define_native_function("pop", _pop)
 	vm.define_native_function("insert", _insert)
 	vm.define_native_function("remove", _remove)
-	vm.define_native_function("clear", _clear)
-	vm.define_native_function("contains", _contains)
 	vm.define_native_function("index", _index)
-	vm.define_native_function("extend", _extend)
 	vm.define_native_function("copy", _copy.bind(vm.heap))
 	vm.define_native_function("reverse", _reverse)
 	vm.define_native_function("sort", _sort)
-
-
-static func _length(list: Variant) -> Variant:
-	var error := _require_list(list, "len")
-	if error != null:
-		return error
-	return list.size()
-
-
-static func _append(list: Variant, value: Variant) -> Variant:
-	var error := _require_list(list, "append")
-	if error != null:
-		return error
-	list.append(value)
-	return null
-
-
-static func _pop(list: Variant) -> Variant:
-	var error := _require_list(list, "pop")
-	if error != null:
-		return error
-	if list.is_empty():
-		return _error("pop() cannot pop an empty list.")
-	return list.pop_back()
 
 
 static func _insert(list: Variant, index: Variant, value: Variant) -> Variant:
@@ -70,21 +40,6 @@ static func _remove(list: Variant, value: Variant) -> Variant:
 	return null
 
 
-static func _clear(list: Variant) -> Variant:
-	var error := _require_list(list, "clear")
-	if error != null:
-		return error
-	list.clear()
-	return null
-
-
-static func _contains(list: Variant, value: Variant) -> Variant:
-	var error := _require_list(list, "contains")
-	if error != null:
-		return error
-	return list.has(value)
-
-
 static func _index(list: Variant, value: Variant) -> Variant:
 	var error := _require_list(list, "index")
 	if error != null:
@@ -94,17 +49,6 @@ static func _index(list: Variant, value: Variant) -> Variant:
 	if index == -1:
 		return _error("index() value was not found in the list.")
 	return index
-
-
-static func _extend(list: Variant, other: Variant) -> Variant:
-	var error := _require_list(list, "extend")
-	if error != null:
-		return error
-	if not other is Array:
-		return _error("extend() second argument must be a list.")
-	# Snapshot also makes extend(list, list) safe.
-	list.append_array(other.duplicate())
-	return null
 
 
 static func _copy(list: Variant, heap: SessionHeap) -> Variant:

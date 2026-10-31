@@ -23,9 +23,19 @@ func new_closure(function: CompiledFunction) -> Closure:
 	return closure
 
 
+func new_circular_buffer(items: Array) -> CircularBuffer:
+	var deque := CircularBuffer.new(maxi(8, items.size()))
+	_allocations.append(deque)
+	for value in items:
+		deque.push_back(value)
+	return deque
+
+
 func clear() -> void:
 	for value in _allocations:
 		if value is Array:
+			value.clear()
+		elif value is CircularBuffer:
 			value.clear()
 		elif value is Closure:
 			value.upvalues.clear()

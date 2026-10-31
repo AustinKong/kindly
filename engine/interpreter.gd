@@ -20,11 +20,5 @@ func interpret(source: String, output: Callable = Callable()) -> Variant:
 		return compiled
 
 	var vm := VirtualMachine.new()
-	StandardLibrary.register(vm)
-	vm.define_native_function("print", func(value: Variant) -> void:
-		if output.is_valid():
-			output.call(str(value))
-		else:
-			print(value)
-	)
+	StandardLibrary.register(vm, output)
 	return vm.interpret(compiled)

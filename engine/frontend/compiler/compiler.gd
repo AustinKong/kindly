@@ -291,10 +291,32 @@ func _parse_parameters() -> void:
 	while _compile_error == null:
 		if not _consume(Token.Type.IDENTIFIER, "Expect parameter name."):
 			return
-		var local_index: Variant = _declare_local(_previous_lexeme(), true)
+
+		var local_index: Variant = _declare_local(_previous_lexeme())
 		if local_index == null:
 			return
-		_function.arity += 1
+
+		if _match(Token.Type.EQUAL):
+			# For optional args, emit the bytecode to check if arg count > index. If so, skip past default value definition.
+			_emit_instruction(OpCode.ARGUMENT_COUNT)
+			_emit_constant(local_index)
+			_emit_instruction(OpCode.GREATER)
+			var skip_default: Variant = _emit_jump(OpCode.JUMP_IF_TRUE)
+			if skip_default == null:
+				return
+			_parse_expression()
+			_emit_instruction(OpCode.DEFINE_LOCAL)
+			_patch_jump(skip_default)
+
+			_emit_instruction(OpCode.POP)
+		elif _function.min_arity != _function.max_arity:
+			_error("Required parameters cannot follow optional parameters.", _previous())
+			return
+		else:
+			_function.min_arity += 1
+
+		_function.max_arity += 1
+		_locals[local_index].is_initialized = true
 
 		if not _match(Token.Type.COMMA):
 			break
