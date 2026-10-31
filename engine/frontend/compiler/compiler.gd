@@ -12,9 +12,12 @@ const OpCode = preload("res://engine/bytecode/opcode.gd")
 const MAX_LOCALS: int = 255
 const MAX_CONSTANTS: int = 256
 const MAX_ARGUMENTS: int = 255
+const MAX_LIST_ELEMENTS: int = 255
 const MAX_UPVALUES: int = 256
 const MIN_JUMP_OFFSET: int = -0x8000
 const MAX_JUMP_OFFSET: int = 0x7fff
+
+const ASSIGNMENT_BP: int = 0
 
 
 # Fixed grammar table. Rule objects and bound handlers require instance initialization.
@@ -30,7 +33,7 @@ var RULES: Dictionary[int, ParseRule] = {
 		_parse_grouping, 0, _parse_call, 170, 171
 	),
 	Token.Type.LEFT_BRACKET: ParseRule.new(
-		_parse_list, 0, _parse_index, 170, 171
+		_parse_list, 0, _parse_subscript, 170, 171
 	),
 	Token.Type.LEFT_BRACE: ParseRule.new(_parse_dictionary),
 	Token.Type.DOT: ParseRule.new(
@@ -285,7 +288,7 @@ func _parse_parameters() -> void:
 	if _match(Token.Type.RIGHT_PARENTHESES):
 		return
 
-	while true:
+	while _compile_error == null:
 		if not _consume(Token.Type.IDENTIFIER, "Expect parameter name."):
 			return
 		var local_index: Variant = _declare_local(_previous_lexeme(), true)
@@ -327,26 +330,8 @@ func _parse_statement() -> void:
 		_parse_for_statement()
 	elif _match(Token.Type.RETURN):
 		_parse_return_statement()
-	elif _current().type == Token.Type.IDENTIFIER and _peek().type == Token.Type.EQUAL:
-		_parse_variable_assignment()
 	else:
 		_parse_expression_statement()
-
-
-## Reassigns one existing variable; chained assignment is rejected.
-func _parse_variable_assignment() -> void:
-	_advance()
-
-	var binding := _resolve_binding(_previous_lexeme())
-	if binding == null:
-		return
-
-	_consume(Token.Type.EQUAL, "Expect '=' after assignment target.")
-	_parse_expression()
-	_consume(Token.Type.NEWLINE, "Expect newline after assignment.")
-
-	_emit_instruction(binding.set_opcode, binding.index)
-	_emit_instruction(OpCode.POP)
 
 
 func _parse_expression_statement() -> void:
@@ -367,10 +352,8 @@ func _parse_return_statement() -> void:
 
 func _parse_if_statement() -> void:
 	var end_jumps: Array[int] = []
-	while true:
+	while _compile_error == null:
 		_parse_expression()
-		if _compile_error != null:
-			return
 
 		var false_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
 		if false_jump == null:
@@ -378,8 +361,6 @@ func _parse_if_statement() -> void:
 		_emit_instruction(OpCode.POP)
 
 		_parse_scoped_block()
-		if _compile_error != null:
-			return
 
 		var end_jump: Variant = _emit_jump(OpCode.JUMP)
 		if end_jump == null:
@@ -507,11 +488,13 @@ func _parse_for_statement() -> void:
 func _parse_expression(min_bp: int = 0) -> void:
 	_advance()
 
+	var can_assign := min_bp <= ASSIGNMENT_BP
+
 	var rule: ParseRule = RULES.get(_previous().type)
 	if rule == null or not rule.prefix.is_valid():
 		_error("Expected expression.", _previous())
 		return
-	rule.prefix.call(rule.prefix_bp)
+	rule.prefix.call(rule.prefix_bp, can_assign)
 
 	while _compile_error == null:
 		rule = RULES.get(_current().type)
@@ -521,10 +504,13 @@ func _parse_expression(min_bp: int = 0) -> void:
 			break
 
 		_advance()
-		rule.infix.call(rule.right_bp)
+		rule.infix.call(rule.right_bp, can_assign)
+
+	if _compile_error == null and can_assign and _match(Token.Type.EQUAL):
+		_error("Invalid assignment target.", _previous())
 
 
-func _parse_number(_min_bp: int) -> void:
+func _parse_number(_min_bp: int, _can_assign: bool) -> void:
 	var lexeme := _previous_lexeme()
 	if lexeme.contains("."):
 		var value := lexeme.to_float()
@@ -541,35 +527,43 @@ func _parse_number(_min_bp: int) -> void:
 		_emit_constant(lexeme.to_int())
 
 
-func _parse_string(_min_bp: int) -> void:
+func _parse_string(_min_bp: int, _can_assign: bool) -> void:
 	var lexeme := _previous_lexeme()
 	_emit_constant(lexeme.substr(1, len(lexeme) - 2))
 
 
-func _parse_literal(_min_bp: int) -> void:
+func _parse_literal(_min_bp: int, _can_assign: bool) -> void:
 	match _previous().type:
 		Token.Type.TRUE: _emit_instruction(OpCode.TRUE)
 		Token.Type.FALSE: _emit_instruction(OpCode.FALSE)
 		Token.Type.NONE: _emit_instruction(OpCode.NONE)
 
 
-func _parse_variable(_min_bp: int) -> void:
+func _parse_variable(_min_bp: int, can_assign: bool) -> void:
 	var binding := _resolve_binding(_previous_lexeme())
 	if binding == null:
 		return
+
 	if binding.get_opcode == OpCode.GET_LOCAL and not _locals[binding.index].is_initialized:
-		_error("Cannot read local variable in its own initializer.", _previous())
-	_emit_instruction(binding.get_opcode, binding.index)
+		var action := "assign to" if can_assign and _current().type == Token.Type.EQUAL else "read"
+		_error("Cannot %s local variable in its own initializer." % action, _previous())
+		return
+
+	if can_assign and _match(Token.Type.EQUAL):
+		_parse_expression(ASSIGNMENT_BP)
+		_emit_instruction(binding.set_opcode, binding.index)
+	else:
+		_emit_instruction(binding.get_opcode, binding.index)
 
 
 ## Parses a parenthesized expression with a fresh binding power threshold and consumes ')'.
-func _parse_grouping(_min_bp: int) -> void:
+func _parse_grouping(_min_bp: int, _can_assign: bool) -> void:
 	_parse_expression()
 	_consume(Token.Type.RIGHT_PARENTHESES, "Expect ')' after expression.")
 
 
 ## Parses a unary operator's operand at min_bp, then emits the operator's instruction.
-func _parse_unary(min_bp: int) -> void:
+func _parse_unary(min_bp: int, _can_assign: bool) -> void:
 	var operator := _previous()
 	_parse_expression(min_bp)
 	match operator.type:
@@ -578,7 +572,7 @@ func _parse_unary(min_bp: int) -> void:
 
 
 ## Parses a binary operator's right operand at min_bp, then emits the operator's instruction.
-func _parse_binary(min_bp: int) -> void:
+func _parse_binary(min_bp: int, _can_assign: bool) -> void:
 	var operator := _previous()
 	_parse_expression(min_bp)
 	match operator.type:
@@ -601,7 +595,7 @@ func _parse_binary(min_bp: int) -> void:
 		_: _error("Binary operator is not implemented yet.", operator)
 
 
-func _parse_and(min_bp: int) -> void:
+func _parse_and(min_bp: int, _can_assign: bool) -> void:
 	var end_jump: Variant = _emit_jump(OpCode.JUMP_IF_FALSE)
 	if end_jump == null:
 		return
@@ -610,7 +604,7 @@ func _parse_and(min_bp: int) -> void:
 	_patch_jump(end_jump)
 
 
-func _parse_or(min_bp: int) -> void:
+func _parse_or(min_bp: int, _can_assign: bool) -> void:
 	var end_jump: Variant = _emit_jump(OpCode.JUMP_IF_TRUE)
 	if end_jump == null:
 		return
@@ -619,13 +613,11 @@ func _parse_or(min_bp: int) -> void:
 	_patch_jump(end_jump)
 
 
-func _parse_call(_min_bp: int) -> void:
+func _parse_call(_min_bp: int, _can_assign: bool) -> void:
 	var arg_count := 0
 	if _current().type != Token.Type.RIGHT_PARENTHESES:
-		while true:
+		while _compile_error == null:
 			_parse_expression()
-			if _compile_error != null:
-				return
 			if arg_count == MAX_ARGUMENTS:
 				_error("Can't have more than 255 arguments.", _previous())
 				return
@@ -638,19 +630,40 @@ func _parse_call(_min_bp: int) -> void:
 	_emit_instruction(OpCode.CALL, arg_count)
 
 
-func _parse_index(_min_bp: int) -> void:
-	_error("Indexing is not implemented yet.", _previous())
+func _parse_subscript(_min_bp: int, can_assign: bool) -> void:
+	_parse_expression()
+	_consume(Token.Type.RIGHT_BRACKET, "Expected ']'.")
+
+	if can_assign and _match(Token.Type.EQUAL):
+		_parse_expression(ASSIGNMENT_BP)
+		_emit_instruction(OpCode.SET_SUBSCRIPT)
+	else:
+		_emit_instruction(OpCode.GET_SUBSCRIPT)
 
 
-func _parse_property(_min_bp: int) -> void:
+func _parse_property(_min_bp: int, _can_assign: bool) -> void:
 	_error("Property access is not implemented yet.", _previous())
 
 
-func _parse_list(_min_bp: int) -> void:
-	_error("List literals are not implemented yet.", _previous())
+func _parse_list(_min_bp: int, _can_assign: bool) -> void:
+	var count := 0
+	if _current().type != Token.Type.RIGHT_BRACKET:
+		while _compile_error == null:
+			# This only restricts list literals, not runtime list sizes.
+			if count == MAX_LIST_ELEMENTS:
+				_error("Can't have more than 255 list elements.")
+				return
+			_parse_expression()
+			count += 1
+
+			if not _match(Token.Type.COMMA):
+				break
+
+	_consume(Token.Type.RIGHT_BRACKET, "Expected ']' after list.")
+	_emit_instruction(OpCode.BUILD_LIST, count)
 
 
-func _parse_dictionary(_min_bp: int) -> void:
+func _parse_dictionary(_min_bp: int, _can_assign: bool) -> void:
 	_error("Dictionary literals are not implemented yet.", _previous())
 
 
@@ -710,35 +723,35 @@ func _resolve_local(name: String) -> Variant:
 
 
 ## Carries the original reference token through forwarding captures for accurate errors.
-func _resolve_upvalue(name: String, reference: Token = null) -> Variant:
+func _resolve_upvalue(name: String, ref: Token = null) -> Variant:
 	if _enclosing == null:
 		return null
-	if reference == null:
-		reference = _previous()
+	if ref == null:
+		ref = _previous()
 
 	var enclosing_local: Variant = _enclosing._resolve_local(name)
 	if enclosing_local != null:
-		return _add_upvalue(enclosing_local, true, reference)
+		return _add_upvalue(enclosing_local, true, ref)
 
-	var enclosing_upvalue: Variant = _enclosing._resolve_upvalue(name, reference)
+	var enclosing_upvalue: Variant = _enclosing._resolve_upvalue(name, ref)
 	if _enclosing._compile_error != null:
 		if _compile_error == null:
 			_compile_error = _enclosing._compile_error
 		return null
 	if enclosing_upvalue != null:
-		return _add_upvalue(enclosing_upvalue, false, reference)
+		return _add_upvalue(enclosing_upvalue, false, ref)
 
 	return null
 
 
 ## Returns a capture index, or null on overflow; existing captures remain reusable at capacity.
-func _add_upvalue(index: int, is_local: bool, reference: Token = null) -> Variant:
+func _add_upvalue(index: int, is_local: bool, ref: Token = null) -> Variant:
 	for i in range(len(_upvalues)):
 		var upvalue := _upvalues[i]
 		if upvalue.index_in_enclosing == index and upvalue.is_local == is_local:
 			return i
 	if len(_upvalues) >= MAX_UPVALUES:
-		_error("Too many closure variables in function.", reference)
+		_error("Too many closure variables in function.", ref)
 		return null
 	_upvalues.append(Upvalue.new(index, is_local))
 	_function.upvalue_count = len(_upvalues)

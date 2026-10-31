@@ -6,6 +6,7 @@ const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
 const Lexer = preload("res://engine/frontend/lexer/lexer.gd")
 const ScanError = preload("res://engine/frontend/lexer/scan_error.gd")
 const CompileError = preload("res://engine/frontend/compiler/compile_error.gd")
+const StandardLibrary = preload("res://engine/standard_library/standard_library.gd")
 
 
 ## Returns null on success, or the scan, compile, or runtime error for the caller to display.
@@ -19,6 +20,7 @@ func interpret(source: String, output: Callable = Callable()) -> Variant:
 		return compiled
 
 	var vm := VirtualMachine.new()
+	StandardLibrary.register(vm)
 	vm.define_native_function("print", func(value: Variant) -> void:
 		if output.is_valid():
 			output.call(str(value))

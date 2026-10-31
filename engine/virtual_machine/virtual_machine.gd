@@ -7,6 +7,7 @@ const Cell = preload("res://engine/virtual_machine/cell.gd")
 const Closure = preload("res://engine/virtual_machine/closure.gd")
 const NativeFunction = preload("res://engine/virtual_machine/native_function.gd")
 const RuntimeError = preload("res://engine/virtual_machine/runtime_error.gd")
+const SessionHeap = preload("res://engine/virtual_machine/session_heap.gd")
 
 const CompiledFunction = preload("res://engine/bytecode/compiled_function.gd")
 const OpCode = preload("res://engine/bytecode/opcode.gd")
@@ -18,8 +19,8 @@ const INSTRUCTION_LIMIT: int = 1000000
 var _stack: Array = []
 var _call_stack: Array[CallFrame] = []
 var _globals: Dictionary = {}
-## Track closures to break cycles formed by Closure <-> Cell that Godot cannot free via ref counting.
-var _closures: Array[WeakRef] = []
+## Native functions creating session-owned values must allocate through this heap.
+var heap := SessionHeap.new()
 
 
 ## Registers a host callable in the same global namespace as script bindings.
@@ -36,8 +37,7 @@ func interpret(function: CompiledFunction) -> RuntimeError:
 
 
 func _execute(function: CompiledFunction) -> RuntimeError:
-	var entry := Closure.new(function)
-	_closures.append(weakref(entry))
+	var entry := heap.new_closure(function)
 	_call_stack.append(CallFrame.new(entry))
 	var remaining_instructions := INSTRUCTION_LIMIT
 
@@ -55,7 +55,6 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 			OpCode.FALSE: _stack.push_back(false)
 			OpCode.NONE: _stack.push_back(null)
 			OpCode.POP: _stack.pop_back()
-
 			# Unary and binary operations.
 			OpCode.NEGATE:
 				if typeof(_stack.back()) not in NUMBER_TYPES:
@@ -115,8 +114,7 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 			# Closures and captured cells.
 			OpCode.CLOSURE:
 				var closure_function: CompiledFunction = _read_constant()
-				var closure := Closure.new(closure_function)
-				_closures.append(weakref(closure))
+				var closure := heap.new_closure(closure_function)
 
 				for i in range(closure_function.upvalue_count):
 					var is_local := _read_byte() == 1
@@ -172,6 +170,9 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 					_stack.resize(callee_index)
 				else:
 					var result: Variant = callee.callable.callv(args)
+					# Standard library has no access to the line. VM needs to unpack and add line number.
+					if result is RuntimeError:
+						return _runtime_error(result.message)
 					_stack.resize(callee_index)
 					_stack.push_back(result)
 			OpCode.RETURN:
@@ -182,17 +183,37 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 				if _call_stack.is_empty():
 					return null
 				_stack.push_back(result)
+			OpCode.BUILD_LIST:
+				var list_length := _read_byte()
+				var list := heap.new_list([])
+				for _i in range(list_length):
+					list.append(_stack.pop_back())
+				list.reverse()
+				_stack.push_back(list)
+			OpCode.GET_SUBSCRIPT:
+				var index_in_list: Variant = _stack.pop_back()
+				var list: Variant = _stack.pop_back()
+				var error := _validate_subscript(list, index_in_list)
+				if error != null:
+					return error
+				_stack.push_back(list[index_in_list])
+			OpCode.SET_SUBSCRIPT:
+				var value: Variant = _stack.pop_back()
+				var index_in_list: Variant = _stack.pop_back()
+				var list: Variant = _stack.pop_back()
+				var error := _validate_subscript(list, index_in_list)
+				if error != null:
+					return error
+				list[index_in_list] = value
+				_stack.push_back(value)
+
 
 	return null
 
 
-## Ends the session, invalidating its closures and releasing captured reference cycles.
+## Ends the session, clearing lists and captures before releasing heap ownership.
 func _dispose() -> void:
-	for reference in _closures:
-		var closure: Closure = reference.get_ref()
-		if closure != null:
-			closure.upvalues.clear()
-	_closures.clear()
+	heap.clear()
 	_globals.clear()
 	_stack.clear()
 	_call_stack.clear()
@@ -228,6 +249,17 @@ func _read_constant() -> Variant:
 
 
 #region Runtime helpers
+
+
+func _validate_subscript(list: Variant, index: Variant) -> RuntimeError:
+	if not list is Array:
+		return _runtime_error("Only lists can be subscripted.")
+	if typeof(index) != TYPE_INT:
+		return _runtime_error("List index must be an integer.")
+	# Preserve Godot's negative indexing: -1 selects the final element.
+	if index < -list.size() or index >= list.size():
+		return _runtime_error("List index out of bounds.")
+	return null
 
 
 func _is_falsy(value: Variant) -> bool:
