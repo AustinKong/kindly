@@ -42,6 +42,14 @@ Built using Robert Nystrom's [Crafting Interpreters](https://craftinginterpreter
 - Godot 4.7 / GDScript, validated with Godot 4.7.2.
 - A direct bytecode compiler and stack-based virtual machine.
 
+## Repository layout
+
+- `runtime/`: the Godot project, language implementation, utilities, addons, and tests. Import `runtime/project.godot` in Godot; its `res://` paths are relative to this directory.
+- `website/`: the browser editor and UI, currently a scaffold. See its [README](website/README.md).
+- `docs/`: language documentation.
+
+Godot executes the language; the website will own editing and presentation. The current project has no web bridge or export entry scene yet.
+
 ## Getting Started
 
 Clone the repository and import it with Godot:
@@ -49,8 +57,8 @@ Clone the repository and import it with Godot:
 ```sh
 git clone https://github.com/AustinKong/kindly.git
 cd kindly
-godot --headless --path . --import
-godot --editor --path .
+godot --headless --editor --path runtime --import --quit
+godot --editor --path runtime
 ```
 
 Use your Godot executable's full path if `godot` is not on `PATH`. This repository contains the interpreter source; there is no default main scene or standalone CLI.
@@ -65,7 +73,17 @@ func run_example() -> void:
 		push_error(result.message)
 ```
 
-This example uses the currently supported syntax. Use tabs for source indentation and LF line endings. An optional second `Callable` argument captures printed output; each invocation starts with fresh globals. See [`engine/interpreter.gd`](engine/interpreter.gd) for the entry point.
+This example uses the currently supported syntax. Use tabs for source indentation and LF line endings. An optional second `Callable` argument captures printed output; each invocation starts with fresh globals. See [`runtime/engine/interpreter.gd`](runtime/engine/interpreter.gd) for the entry point.
+
+## Tests
+
+Run from the repository root after importing the runtime:
+
+```sh
+godot --headless --path runtime --script res://addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode -a res://tests/unit -rd res://.godot/gdunit-reports
+```
+
+The tests exercise the runtime and standard library without either frontend. VS Code tasks are available for importing, opening Godot, and running the tests.
 
 ## Authors
 

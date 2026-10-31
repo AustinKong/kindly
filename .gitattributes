@@ -2,4 +2,4 @@
 * text=auto eol=lf
 
 # Treat third-party addons as vendored and suppress textual diffs.
-addons/** linguist-vendored=true -diff
+runtime/addons/** linguist-vendored=true -diff

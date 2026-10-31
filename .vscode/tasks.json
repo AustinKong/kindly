@@ -7,9 +7,11 @@
       "command": "godot",
       "args": [
         "--headless",
+        "--editor",
         "--path",
-        "${workspaceFolder}",
-        "--import"
+        "${workspaceFolder}/runtime",
+        "--import",
+        "--quit"
       ],
       "problemMatcher": []
     },
@@ -20,7 +22,25 @@
       "args": [
         "--editor",
         "--path",
-        "${workspaceFolder}"
+        "${workspaceFolder}/runtime"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Godot: Tests",
+      "type": "shell",
+      "command": "godot",
+      "args": [
+        "--headless",
+        "--path",
+        "${workspaceFolder}/runtime",
+        "--script",
+        "res://addons/gdUnit4/bin/GdUnitCmdTool.gd",
+        "--ignoreHeadlessMode",
+        "-a",
+        "res://tests/unit",
+        "-rd",
+        "res://.godot/gdunit-reports"
       ],
       "problemMatcher": []
     }

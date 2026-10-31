@@ -11,3 +11,10 @@ android/
 Thumbs.db
 *.log
 dump/
+
+# Website dependencies and generated builds
+node_modules/
+/website/dist/
+
+# Godot exports (generated, not source)
+/runtime/build/

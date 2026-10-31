@@ -1,6 +1,6 @@
 {
   "files.exclude": {
-    "addons": true,
+    "runtime/addons": true,
     "**/.git": true,
     "**/.vscode": true,
     "**/.editorconfig": true,
