@@ -3,11 +3,12 @@ import { Code } from 'astro:components';
 import { BadgeCheck, CircleAlert } from '@lucide/astro';
 import Button from './shared/Button.astro';
 import Badge from './shared/Badge.astro';
+import { simpleGrammar } from '../languages/simple/grammar';
 
 const examples = [
   {
     label: 'Variables',
-    traditional: 'x = 10\nprint(x)',
+    traditional: 'var x = 10\nprint(x)',
     kindly: 'With respect to x, let it be 10.\nKindly print x.\nThank you.',
   },
   {
@@ -18,7 +19,7 @@ const examples = [
   },
   {
     label: 'Collections',
-    traditional: 'colors = ["sage", "clay"]\ncolors.append("ochre")\nprint(colors)',
+    traditional: 'var colors = ["sage", "clay"]\nappend(colors, "ochre")\nprint(colors)',
     kindly:
       'With respect to colors, let it be ["sage", "clay"].\nKindly append "ochre" to colors.\nKindly print colors.\nThank you.',
   },
@@ -58,7 +59,7 @@ const examples = [
               Unprofessional
             </Badge>
           </header>
-          <Code code={example.traditional} lang="python" theme="github-light" />
+          <Code code={example.traditional} lang={simpleGrammar} theme="github-light" />
           <p>Abrupt. Demanding. Completely devoid of workplace etiquette.</p>
         </article>
         <article>

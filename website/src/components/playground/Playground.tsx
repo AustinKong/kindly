@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Editor, { type EditorDiagnostic, type EditorStatus } from './Editor';
 import Console, { type Reply } from './Console';
-import { mountRuntime } from './runtime-bridge';
+import { mountRuntime, type TokenizeResult } from './runtime-bridge';
 import './playground.css';
 
 export default function Playground() {
@@ -10,12 +10,14 @@ export default function Playground() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [bridgeError, setBridgeError] = useState('');
   const [diagnostic, setDiagnostic] = useState<EditorDiagnostic | null>(null);
+  const [tokenization, setTokenization] = useState<TokenizeResult | null>(null);
   const request = useRef({ id: 0, source: '', subject: '' });
 
   useEffect(
     () =>
       mountRuntime({
         onReady: () => setStatus('ready'),
+        onTokens: setTokenization,
         onDone: (result) => {
           const { id, source, subject } = request.current;
           if (result.runId !== id) return;
@@ -66,7 +68,12 @@ export default function Playground() {
 
   return (
     <div className="playground">
-      <Editor status={status} diagnostic={diagnostic} onRun={handleRun} />
+      <Editor
+        status={status}
+        diagnostic={diagnostic}
+        tokenization={tokenization}
+        onRun={handleRun}
+      />
       <Console
         replies={replies}
         selectedId={selectedId}

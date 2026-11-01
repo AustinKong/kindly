@@ -1,0 +1,22 @@
+// Shared runtime functions; syntax-specific keywords belong to each language.
+export const builtins = [
+  { name: 'append', signature: 'append(collection, value)' },
+  { name: 'append_front', signature: 'append_front(deque, value)' },
+  { name: 'contains', signature: 'contains(collection, value)' },
+  { name: 'copy', signature: 'copy(collection)' },
+  { name: 'deque', signature: 'deque(items = [])' },
+  { name: 'extend', signature: 'extend(destination, source)' },
+  { name: 'get', signature: 'get(dictionary, key, fallback = None)' },
+  { name: 'index', signature: 'index(list, value)' },
+  { name: 'insert', signature: 'insert(list, index, value)' },
+  { name: 'keys', signature: 'keys(dictionary)' },
+  { name: 'len', signature: 'len(collection)' },
+  { name: 'pop', signature: 'pop(collection) / pop(dictionary, key, fallback = None)' },
+  { name: 'pop_front', signature: 'pop_front(deque)' },
+  { name: 'print', signature: 'print(value)' },
+  { name: 'remove', signature: 'remove(collection, value)' },
+  { name: 'reverse', signature: 'reverse(list)' },
+  { name: 'slice', signature: 'slice(value, start = None, stop = None)' },
+  { name: 'sort', signature: 'sort(list)' },
+  { name: 'values', signature: 'values(dictionary)' },
+];

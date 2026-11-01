@@ -21,7 +21,9 @@ enum Type {
 	# Whitespace.
 	DEDENT, INDENT, NEWLINE,
 	# Misc.
-	EOF
+	EOF,
+	# Editor-only tokens, never emitted by scan().
+	COMMENT, INVALID
 }
 
 var type: Type

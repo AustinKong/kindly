@@ -7,7 +7,14 @@ import { Compartment, countColumn, EditorState, Prec } from '@codemirror/state';
 import { EditorView, type ViewUpdate } from '@codemirror/view';
 import { Mail, PenLine, Send } from 'lucide-react';
 import Button from '../shared/Button';
-import type { RunResult } from './runtime-bridge';
+import type { RunResult, TokenizeResult } from './runtime-bridge';
+import {
+  setTokens,
+  tokenState,
+  tokenization as tokenizationSupport,
+  utf16Offsets,
+} from '../../languages/tokenization';
+import { simple, initialSource } from '../../languages/simple';
 
 export type EditorStatus = 'loading' | 'ready' | 'running' | 'error';
 export type EditorDiagnostic = { source: string; error: RunResult['error'] };
@@ -15,16 +22,17 @@ export type EditorDiagnostic = { source: string; error: RunResult['error'] };
 type Props = {
   status: EditorStatus;
   diagnostic: EditorDiagnostic | null;
+  tokenization: TokenizeResult | null;
   onRun: (source: string, subject: string) => void;
 };
 
-const initialSource = 'var message = "Hello, Kindly!"\nprint(message)\n';
-
-const basicSetup = { foldGutter: false, autocompletion: false };
+const basicSetup = { foldGutter: false };
 const vimMode = new Compartment();
 const indentation = new Compartment();
 
 const extensions = [
+  simple(),
+  tokenizationSupport,
   vimMode.of([]),
   indentation.of([indentUnit.of('\t'), EditorState.tabSize.of(4)]),
   EditorState.lineSeparator.of('\n'),
@@ -35,13 +43,31 @@ const extensions = [
   EditorView.contentAttributes.of({ 'aria-label': 'Source code', spellcheck: 'false' }),
 ];
 
-export default function Editor({ status, diagnostic, onRun }: Props) {
+export default function Editor({ status, diagnostic, tokenization, onRun }: Props) {
   const [source, setSource] = useState(initialSource);
   const [subject, setSubject] = useState('A small request');
   const [vimEnabled, setVimEnabled] = useState(false);
   const [tabSize, setTabSize] = useState(4);
   const [position, setPosition] = useState({ line: 1, column: 1 });
   const editor = useRef<ReactCodeMirrorRef>(null);
+  const runtimeReady = status === 'ready' || status === 'running';
+
+  useEffect(() => {
+    if (!runtimeReady) return;
+    const view = editor.current?.view;
+    if (!view) return;
+    const revision = view.state.field(tokenState).revision;
+    const snapshot = view.state.doc.toString();
+    const timer = window.setTimeout(() => {
+      if (view.state.field(tokenState).revision === revision)
+        window.tokenize?.(snapshot, 'simple', revision);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [source, runtimeReady]);
+
+  useEffect(() => {
+    if (tokenization) editor.current?.view?.dispatch({ effects: setTokens.of(tokenization) });
+  }, [tokenization]);
 
   const handleEditorUpdate = useCallback((update: ViewUpdate) => {
     const head = update.state.selection.main.head;
@@ -90,9 +116,9 @@ export default function Editor({ status, diagnostic, onRun }: Props) {
     let to = line.to;
     if (error.start !== undefined && error.length !== undefined) {
       // Godot counts Unicode code points; CodeMirror counts UTF-16 code units.
-      const characters = Array.from(source);
-      from = characters.slice(0, error.start).join('').length;
-      to = characters.slice(0, error.start + error.length).join('').length;
+      const offsets = utf16Offsets(source);
+      from = offsets[error.start];
+      to = offsets[error.start + error.length];
     }
     view.dispatch(
       setDiagnostics(view.state, [{ from, to, severity: 'error', message: error.message }])

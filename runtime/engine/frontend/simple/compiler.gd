@@ -3,9 +3,9 @@ extends RefCounted
 ## Compiles expressions directly to bytecode using a binding power Pratt parser.
 ## Prefix handlers parse the start of an expression; infix handlers extend an existing one.
 
-const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
-const Token = preload("res://engine/frontend/token.gd")
-const CompileError = preload("res://engine/frontend/compiler/compile_error.gd")
+const Compiler = preload("res://engine/frontend/simple/compiler.gd")
+const Token = preload("res://engine/frontend/simple/token.gd")
+const CompileError = preload("res://engine/frontend/compile_error.gd")
 const CompiledFunction = preload("res://engine/bytecode/compiled_function.gd")
 const OpCode = preload("res://engine/bytecode/opcode.gd")
 

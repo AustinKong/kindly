@@ -1,7 +1,8 @@
 ---
 import { ArrowLeft, ArrowRight } from '@lucide/astro';
 import { Code } from 'astro:components';
-import Layout from '../layouts/Layout.astro';
+import Layout from '../../layouts/Layout.astro';
+import { simpleGrammar } from '../../languages/simple/grammar';
 
 const hello = 'var message = "Hello, Kindly!"\nprint(message)';
 const conditions = 'var count = 0\n\nwhile count < 3:\n\tprint(count)\n\tcount = count + 1';
@@ -10,15 +11,17 @@ const functions =
 ---
 
 <Layout
-  title="Documentation · Kindly"
-  description="Get started with Kindly: variables, control flow, and functions."
+  title="Simple documentation · Kindly"
+  description="Simple syntax: variables, control flow, and functions."
 >
   <main>
     <a href="/"><ArrowLeft size={16} aria-hidden="true" /> Kindly</a>
     <header>
-      <small>Documentation</small>
-      <h1>Your first few lines.</h1>
-      <p>A starting point for learning Kindly. More documentation is on the way.</p>
+      <small>Simple</small>
+      <h1>Simple syntax.</h1>
+      <p>
+        The playground's executable syntax. Indent blocks with tabs and use double-quoted strings.
+      </p>
       <a href="/editor">Open the editor <ArrowRight size={16} aria-hidden="true" /></a>
     </header>
     <section aria-labelledby="getting-started">
@@ -27,7 +30,7 @@ const functions =
         Declare a variable with <code>var</code> and use <code>print</code> to send a value to the console.
         Copy this example into the editor and select Run.
       </p>
-      <Code code={hello} lang="python" theme="github-light" />
+      <Code code={hello} lang={simpleGrammar} theme="github-light" />
       <p>
         Change an existing value with assignment, such as <code>message = "Hello again!"</code>.
         Declaring the same name twice in one scope is an error.
@@ -40,7 +43,7 @@ const functions =
           >else</code
         > to choose what happens next. Indentation groups statements into a block.
       </p>
-      <Code code={conditions} lang="python" theme="github-light" />
+      <Code code={conditions} lang={simpleGrammar} theme="github-light" />
     </section>
     <section aria-labelledby="functions">
       <h2 id="functions">Put a name to it</h2>
@@ -48,7 +51,7 @@ const functions =
         Define a function with <code>def</code> and return a value with <code>return</code>.
         Parameters can have default values.
       </p>
-      <Code code={functions} lang="python" theme="github-light" />
+      <Code code={functions} lang={simpleGrammar} theme="github-light" />
     </section>
   </main>
 </Layout>

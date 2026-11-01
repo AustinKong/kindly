@@ -2,10 +2,10 @@ class_name Interpreter
 extends RefCounted
 
 const VirtualMachine = preload("res://engine/virtual_machine/virtual_machine.gd")
-const Compiler = preload("res://engine/frontend/compiler/compiler.gd")
-const Lexer = preload("res://engine/frontend/lexer/lexer.gd")
-const ScanError = preload("res://engine/frontend/lexer/scan_error.gd")
-const CompileError = preload("res://engine/frontend/compiler/compile_error.gd")
+const Compiler = preload("res://engine/frontend/simple/compiler.gd")
+const Lexer = preload("res://engine/frontend/simple/lexer.gd")
+const ScanError = preload("res://engine/frontend/scan_error.gd")
+const CompileError = preload("res://engine/frontend/compile_error.gd")
 const StandardLibrary = preload("res://engine/standard_library/standard_library.gd")
 
 

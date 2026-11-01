@@ -1,7 +1,7 @@
 extends RefCounted
 
-const Token = preload("res://engine/frontend/token.gd")
-const ScanError = preload("res://engine/frontend/lexer/scan_error.gd")
+const Token = preload("res://engine/frontend/simple/token.gd")
+const ScanError = preload("res://engine/frontend/scan_error.gd")
 
 # Assumptions:
 # - Source string is tab indented, enforced by host application.
@@ -40,6 +40,8 @@ var _indentation_stack: Array = [0]
 var _current_indentation: int = 0
 ## Opening bracket tokens, to validate pairs and locate unclosed brackets.
 var _brackets: Array[Token] = []
+var _editor_mode := false
+var _editor_tokens: Array[Token] = []
 
 
 func _init(p_source: String):
@@ -61,6 +63,18 @@ func scan() -> Variant:
 			return tokens
 
 	return tokens
+
+
+## Silently recovers partial tokens for highlighting, including comments.
+func scan_for_editor() -> Array[Token]:
+	_editor_mode = true
+	while true:
+		var token: Token = scan_token()
+		if token.type == Token.Type.EOF:
+			break
+		if token.type not in [Token.Type.INDENT, Token.Type.DEDENT, Token.Type.NEWLINE]:
+			_editor_tokens.append(token)
+	return _editor_tokens
 
 
 ## Returns the next Token or a ScanError.
@@ -92,7 +106,8 @@ func scan_token() -> Variant:
 
 			# As per Python, no whitespace validation is done inside brackets.
 			if has_spaces and _peek() != "" and _brackets.is_empty():
-				return _build_error("Spaces are not allowed for indentation.")
+				if not _editor_mode:
+					return _build_error("Spaces are not allowed for indentation.")
 
 			break
 
@@ -105,13 +120,15 @@ func scan_token() -> Variant:
 				return _build_token(Token.Type.INDENT)
 			elif _current_indentation < _indentation_stack[-1]:
 				if not _indentation_stack.any(func(level): return level == _current_indentation):
-					return _build_error("Unindent does not match any outer indentation level.")
-
-				# Keep the line-start flag set until every dedent has been emitted.
-				_indentation_stack.pop_back()
-				# DEDENT is synthetic and consumes no source characters.
-				_start = _current
-				return _build_token(Token.Type.DEDENT)
+					if not _editor_mode:
+						return _build_error("Unindent does not match any outer indentation level.")
+					_indentation_stack = [0, _current_indentation]
+				else:
+					# Keep the line-start flag set until every dedent has been emitted.
+					_indentation_stack.pop_back()
+					# DEDENT is synthetic and consumes no source characters.
+					_start = _current
+					return _build_token(Token.Type.DEDENT)
 
 		_needs_line_start_processing = false
 
@@ -140,8 +157,10 @@ func scan_token() -> Variant:
 	# Handle EOF, flush unclosed newlines and dedentations.
 	if _current >= len(_source):
 		if not _brackets.is_empty():
-			var opening := _brackets[-1]
-			return ScanError.new("Unclosed '%s'." % _source[opening.start], opening.line, opening.start, opening.length)
+			if not _editor_mode:
+				var opening := _brackets[-1]
+				return ScanError.new("Unclosed '%s'." % _source[opening.start], opening.line, opening.start, opening.length)
+			_brackets.clear()
 
 		if _has_code_on_line:
 			_has_code_on_line = false
@@ -186,6 +205,8 @@ func scan_token() -> Variant:
 		# One or two character tokens.
 		"!":
 			if not _match('='):
+				if _editor_mode:
+					return _build_token(Token.Type.INVALID)
 				return _build_error("'!' must be followed by '='.")
 			return _build_token(Token.Type.BANG_EQUAL)
 		"=":
@@ -197,7 +218,7 @@ func scan_token() -> Variant:
 		# Literals.
 		'"': return _scan_string()
 
-	return _build_error("Unexpected character.")
+	return _build_token(Token.Type.INVALID) if _editor_mode else _build_error("Unexpected character.")
 
 
 #region Token scanning
@@ -205,8 +226,11 @@ func scan_token() -> Variant:
 
 ## Consumes a comment, leaving its terminating newline unconsumed.
 func _skip_comment() -> void:
+	var start := _current
 	while _peek() != "\n" and _peek() != "":
 		_advance()
+	if _editor_mode:
+		_editor_tokens.append(Token.new(Token.Type.COMMENT, _line, start, _current - start))
 
 
 ## Scans a number after its first digit has been consumed.
@@ -245,7 +269,8 @@ func _scan_string() -> Variant:
 
 	# Require a closing quote before a newline or EOF.
 	if not _match('"'):
-		return _build_error("Unterminated string.")
+		if not _editor_mode:
+			return _build_error("Unterminated string.")
 
 	return _build_token(Token.Type.STRING)
 
@@ -260,11 +285,14 @@ func _open_bracket(type: Token.Type) -> Token:
 ## Closes the most recent opening bracket, or reports an unmatched or mismatched closer.
 func _close_bracket(type: Token.Type, expected_opening: Token.Type) -> Variant:
 	if _brackets.is_empty():
-		return _build_error("Unmatched closing '%s'." % _source[_start])
+		if not _editor_mode:
+			return _build_error("Unmatched closing '%s'." % _source[_start])
+		return _build_token(type)
 
 	var opening := _brackets[-1]
 	if opening.type != expected_opening:
-		return _build_error("Closing '%s' does not match opening '%s'." % [_source[_start], _source[opening.start]])
+		if not _editor_mode:
+			return _build_error("Closing '%s' does not match opening '%s'." % [_source[_start], _source[opening.start]])
 
 	_brackets.pop_back()
 	return _build_token(type)

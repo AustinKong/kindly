@@ -6,7 +6,7 @@
 
 Kindly is a Python-like language in which programs resemble excessively polite corporate correspondence. Statements are requests, blocks are indented, and each source file opens and closes like an email.
 
-This document defines the proposed v0.1 language. The [README](../README.md) documents the currently executable syntax. Existing interpreter behavior is the baseline for runtime semantics; the greeting, polite phrases, case-insensitive keywords, and sentence terminators described here require future frontend work.
+This document defines the proposed v0.1 language. The existing Simple frontend defines the currently executable syntax. Existing interpreter behavior is the baseline for runtime semantics; the greeting, polite phrases, case-insensitive keywords, and sentence terminators described here require future frontend work.
 
 ## 1. Scope and conformance
 

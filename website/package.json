@@ -12,6 +12,7 @@
     "astro": "astro",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "node --test src/languages/simple/simple.test.ts",
     "dev:background": "astro dev --background",
     "runtime:export": "node scripts/export-runtime.mjs",
     "runtime:template": "python scripts/build-template.py",
@@ -21,6 +22,7 @@
   },
   "dependencies": {
     "@astrojs/react": "^7.1.2",
+    "@codemirror/autocomplete": "^6.20.4",
     "@codemirror/language": "^6.13.1",
     "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.7.6",

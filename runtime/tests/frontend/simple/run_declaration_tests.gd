@@ -1,7 +1,7 @@
 extends SceneTree
 
 const LanguageInterpreter = preload("res://engine/interpreter.gd")
-const CompileError = preload("res://engine/frontend/compiler/compile_error.gd")
+const CompileError = preload("res://engine/frontend/compile_error.gd")
 
 var _failed := 0
 

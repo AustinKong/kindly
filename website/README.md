@@ -43,6 +43,7 @@ path; run Windows Godot builds from PowerShell.
 | `npm run preview:cloudflare` | Preview through Wrangler.                              |
 | `npm run deploy`             | Build and deploy static assets using `wrangler.jsonc`. |
 | `npm run format`             | Format source files.                                   |
+| `npm test`                   | Test Simple highlighting and completions.              |
 | `npm run format:check`       | Check formatting.                                      |
 
 Deployment requires Wrangler authentication. Build environments need Godot and the custom template;
@@ -53,8 +54,10 @@ Deployment requires Wrangler authentication. Build environments need Godot and t
 - `src/pages/`: routes.
 - `src/layouts/`: page shell.
 - `src/components/playground/`: runtime coordination, editor, and console.
+- `src/languages/`: syntax-specific editor support and shared builtin metadata.
 - `src/styles/`: shared styles.
 - `public/`: static assets and generated runtime export.
 
 The playground communicates with a headless, single-threaded Godot runtime through a same-origin
-iframe. Execution runs on the browser's main thread with a VM instruction budget.
+iframe. Debounced lexer requests provide editor tokens; completions and snippets
+remain in `src/languages/`. Execution runs on the browser's main thread with a VM instruction budget.
