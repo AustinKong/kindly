@@ -1,8 +1,24 @@
+@import './ui.css';
+
 :root {
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-family: system-ui, sans-serif;
-  color: #242424;
-  background: #fafafa;
+  --button-radius: 0.4rem;
+  --badge-radius: 999px;
+  --color-primary: #2563eb;
+  --color-accent: #60a5fa;
+  --color-pale: #bfdbfe;
+  --color-navy: #1a3478;
+  --color-ink: #0c142e;
+  --color-muted: color-mix(in srgb, var(--color-ink) 65%, white);
+  --color-border: color-mix(in srgb, var(--color-pale) 55%, #e5e7eb);
+  --color-surface: #f8fafc;
+  --color-background: #f3f4f6;
+  --color-tint: color-mix(in srgb, var(--color-pale) 30%, white);
+  --color-error: #9d6241;
+  --color-error-surface: #fff5ed;
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  color: var(--color-ink);
+  background: var(--color-background);
   line-height: 1.5;
 }
 
@@ -14,22 +30,67 @@ body {
   margin: 0;
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 5vw, 4rem);
+}
+
+h2 {
+  margin: 0 0 1.1rem;
+  font-size: clamp(2rem, 3vw, 3rem);
+}
+
+p {
+  margin: 0 0 1rem;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+small {
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+a svg {
+  flex-shrink: 0;
+  vertical-align: -0.15em;
+}
+
+pre,
+code {
+  font-family: var(--font-mono);
+}
+
+pre {
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.9;
+  tab-size: 4;
+}
+
 main {
   max-width: 90rem;
   margin-inline: auto;
   padding: 3rem 1.5rem;
-}
-
-.page-heading {
-  margin-bottom: 1.5rem;
-}
-
-.page-heading h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.page-heading p {
-  margin: 0.25rem 0 0;
-  color: #666;
 }

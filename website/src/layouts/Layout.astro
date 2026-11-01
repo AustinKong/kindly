@@ -1,4 +1,5 @@
 ---
+import { Font } from 'astro:assets';
 import '../styles/global.css';
 
 type Props = {
@@ -15,7 +16,10 @@ const { title = 'Kindly', description = 'A programming language that asks nicely
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <Font cssVariable="--font-serif" />
+    <Font cssVariable="--font-sans" />
+    <Font cssVariable="--font-mono" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>{title}</title>
   </head>
   <body>

@@ -1,100 +1,79 @@
 import { useEffect, useRef, useState } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
-import { indentUnit } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-
+import Editor, { type EditorDiagnostic, type EditorStatus } from './Editor';
+import Console, { type Reply } from './Console';
 import { mountRuntime } from './runtime-bridge';
 import './playground.css';
 
-type Status = 'loading' | 'ready' | 'running' | 'error';
-
-const initialSource = 'var message = "Hello, Kindly!"\nprint(message)\n';
-
-const extensions = [
-  indentUnit.of('\t'),
-  EditorState.tabSize.of(4),
-  EditorState.lineSeparator.of('\n'),
-  EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?/g, '\n')),
-  EditorView.contentAttributes.of({ 'aria-label': 'Source code', spellcheck: 'false' }),
-];
-
 export default function Playground() {
-  const [source, setSource] = useState(initialSource);
-  const [status, setStatus] = useState<Status>('loading');
-  const [output, setOutput] = useState('');
-
-  const activeRun = useRef(0);
+  const [status, setStatus] = useState<EditorStatus>('loading');
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [bridgeError, setBridgeError] = useState('');
+  const [diagnostic, setDiagnostic] = useState<EditorDiagnostic | null>(null);
+  const request = useRef({ id: 0, source: '', subject: '' });
 
   useEffect(
     () =>
       mountRuntime({
         onReady: () => setStatus('ready'),
         onDone: (result) => {
-          if (result.runId !== activeRun.current) return;
+          const { id, source, subject } = request.current;
+          if (result.runId !== id) return;
+          setDiagnostic({ source, error: result.error });
 
           const lines = [...result.output];
           if (result.error) {
             lines.push(`Line ${result.error.line + 1}: ${result.error.message}`);
             lines.push(...result.error.stackTrace.map((frame) => `  ${frame}`));
           }
-
-          setOutput(lines.join('\n'));
+          setReplies((previous) => [
+            {
+              id: result.runId,
+              subject,
+              output: lines.join('\n'),
+              ok: result.ok,
+              receivedAt: new Date().toISOString(),
+            },
+            ...previous,
+          ]);
+          setSelectedId(result.runId);
           setStatus('ready');
         },
         onBridgeError: (message) => {
-          setOutput(message);
+          setBridgeError(message);
           setStatus('error');
         },
       }),
     []
   );
 
-  function handleRun() {
+  function handleRun(source: string, subject: string) {
     if (status !== 'ready' || !window.run) return;
-
-    activeRun.current += 1;
-    setOutput('');
+    request.current = {
+      id: request.current.id + 1,
+      source,
+      subject: subject.trim() || '(no subject)',
+    };
+    setDiagnostic(null);
     setStatus('running');
+    window.run(source, request.current.id);
+  }
 
-    window.run(source, activeRun.current);
+  function clearInbox() {
+    setReplies([]);
+    setSelectedId(null);
   }
 
   return (
     <div className="playground">
-      <section className="playground-panel" aria-labelledby="source-heading">
-        <header className="panel-heading">
-          <h2 id="source-heading">Source</h2>
-          <button
-            type="button"
-            className="run-button"
-            onClick={handleRun}
-            disabled={status !== 'ready'}
-          >
-            {status === 'loading' ? 'Loading…' : status === 'running' ? 'Running…' : 'Run'}
-          </button>
-        </header>
-        <div className="source-body">
-          <CodeMirror
-            className="code-editor"
-            value={source}
-            onChange={setSource}
-            extensions={extensions}
-            height="100%"
-            indentWithTab
-            basicSetup={{ foldGutter: false, autocompletion: false }}
-          />
-        </div>
-      </section>
-
-      <section className="playground-panel console-panel" aria-labelledby="console-heading">
-        <header className="panel-heading">
-          <h2 id="console-heading">Console</h2>
-        </header>
-        <pre className="console-output" role="log" aria-label="Console output" aria-live="polite">
-          {output || <span className="console-placeholder">No output yet.</span>}
-        </pre>
-      </section>
+      <Editor status={status} diagnostic={diagnostic} onRun={handleRun} />
+      <Console
+        replies={replies}
+        selectedId={selectedId}
+        bridgeError={bridgeError}
+        onSelect={setSelectedId}
+        onClear={clearInbox}
+      />
     </div>
   );
 }

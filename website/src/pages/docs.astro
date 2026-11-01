@@ -1,0 +1,89 @@
+---
+import { ArrowLeft, ArrowRight } from '@lucide/astro';
+import { Code } from 'astro:components';
+import Layout from '../layouts/Layout.astro';
+
+const hello = 'var message = "Hello, Kindly!"\nprint(message)';
+const conditions = 'var count = 0\n\nwhile count < 3:\n\tprint(count)\n\tcount = count + 1';
+const functions =
+  'def greet(name = "world"):\n\treturn "Hello, " + name + "!"\n\nprint(greet())\nprint(greet("friend"))';
+---
+
+<Layout
+  title="Documentation · Kindly"
+  description="Get started with Kindly: variables, control flow, and functions."
+>
+  <main>
+    <a href="/"><ArrowLeft size={16} aria-hidden="true" /> Kindly</a>
+    <header>
+      <small>Documentation</small>
+      <h1>Your first few lines.</h1>
+      <p>A starting point for learning Kindly. More documentation is on the way.</p>
+      <a href="/editor">Open the editor <ArrowRight size={16} aria-hidden="true" /></a>
+    </header>
+    <section aria-labelledby="getting-started">
+      <h2 id="getting-started">Start with a hello</h2>
+      <p>
+        Declare a variable with <code>var</code> and use <code>print</code> to send a value to the console.
+        Copy this example into the editor and select Run.
+      </p>
+      <Code code={hello} lang="python" theme="github-light" />
+      <p>
+        Change an existing value with assignment, such as <code>message = "Hello again!"</code>.
+        Declaring the same name twice in one scope is an error.
+      </p>
+    </section>
+    <section aria-labelledby="control-flow">
+      <h2 id="control-flow">Take it one step at a time</h2>
+      <p>
+        Use <code>while</code> to repeat work, and <code>if</code>, <code>elif</code>, and <code
+          >else</code
+        > to choose what happens next. Indentation groups statements into a block.
+      </p>
+      <Code code={conditions} lang="python" theme="github-light" />
+    </section>
+    <section aria-labelledby="functions">
+      <h2 id="functions">Put a name to it</h2>
+      <p>
+        Define a function with <code>def</code> and return a value with <code>return</code>.
+        Parameters can have default values.
+      </p>
+      <Code code={functions} lang="python" theme="github-light" />
+    </section>
+  </main>
+</Layout>
+
+<style>
+  main {
+    max-width: 50rem;
+    padding-block: 3rem 6rem;
+  }
+  main > a {
+    display: inline-block;
+    margin-bottom: 3rem;
+    font-size: 0.875rem;
+  }
+  a {
+    color: var(--color-navy);
+    text-underline-offset: 0.2em;
+  }
+  h1 {
+    margin-top: 0.75rem;
+  }
+  h2 {
+    font-size: 2rem;
+  }
+  header p {
+    font-size: 1.1rem;
+  }
+  section {
+    margin-top: 3rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 2.5rem;
+  }
+  main :global(pre) {
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+  }
+</style>

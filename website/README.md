@@ -20,9 +20,19 @@ From the repository root, use `npm --prefix website run <script>` or the Website
 and `public/` contains static assets. Formatting uses two spaces, single quotes, and a 100-character
 line width. Godot keeps its own GDScript formatting settings.
 
-The homepage mounts a React playground island with `client:load`. CodeMirror uses tab indentation and LF (`\n`) line endings, including pasted text, so the bridge passes source directly to the interpreter.
-Run sends the editor source to the Godot interpreter and replaces the console with that run's output
-and any error. Each run starts a fresh interpreter session.
+The homepage is a landing page with editable syntax examples and uses `public/images/hero.png` for its full-width banner. `/docs` contains a documentation starter page.
+
+The `/editor` page mounts a React playground island with `client:load`. CodeMirror uses tab indentation and LF (`\n`) line endings, including pasted text, so the bridge passes source directly to the interpreter.
+Send runs the editor source in the Godot interpreter and adds a reply to the inbox with that run's
+output and any error. Replies can be selected or cleared; inbox history lasts until the page is
+closed or refreshed. Each run starts a fresh interpreter session.
+
+## Icons
+
+Use Lucide SVG components directly: import icons from `@lucide/astro` in Astro pages and
+`lucide-react` in React components. For example, `import { ArrowRight } from '@lucide/astro'`
+or `import { Send } from 'lucide-react'`. Set `aria-hidden="true"` on decorative icons and give
+icon-only buttons an accessible label. Both packages use the same icon set and inherit text color.
 
 ## Godot web runtime
 

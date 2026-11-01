@@ -158,6 +158,7 @@ var _function: CompiledFunction = CompiledFunction.new()
 ## Null for the script; declared functions reference their enclosing compiler.
 var _enclosing: Compiler
 var _scope_depth: int = 0
+var _globals: Dictionary[String, bool] = {}
 var _locals: Array[Local] = []
 var _upvalues: Array[Upvalue] = []
 var _loops: Array[Loop] = []
@@ -222,7 +223,7 @@ func _parse_variable_declaration() -> void:
 	var constant_index: Variant = null
 	var local_index: Variant = null
 	if _scope_depth == 0:
-		constant_index = _add_constant(_previous_lexeme())
+		constant_index = _declare_global(_previous_lexeme())
 		if constant_index == null:
 			return
 	else:
@@ -249,7 +250,7 @@ func _parse_function_declaration() -> void:
 	if not _consume(Token.Type.IDENTIFIER, "Expect function name."):
 		return
 	var function_name := _previous_lexeme()
-	var name_constant_index: Variant = _add_constant(function_name)
+	var name_constant_index: Variant = _declare_global(function_name) if _scope_depth == 0 else _add_constant(function_name)
 	if name_constant_index == null:
 		return
 
@@ -763,6 +764,15 @@ func _parse_dictionary(_min_bp: int, _can_assign: bool) -> void:
 
 
 #region Scopes and captures
+
+
+## Registers a script-level declaration, sharing one namespace for variables and functions.
+func _declare_global(name: String) -> Variant:
+	if _globals.has(name):
+		_error("Already a variable with this name in this scope.", _previous())
+		return null
+	_globals[name] = true
+	return _add_constant(name)
 
 
 ## Registers local metadata without consuming tokens or emitting bytecode; returns its index or null on failure.

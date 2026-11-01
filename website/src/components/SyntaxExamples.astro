@@ -1,0 +1,175 @@
+---
+import { Code } from 'astro:components';
+import { BadgeCheck, CircleAlert } from '@lucide/astro';
+import Button from './shared/Button.astro';
+import Badge from './shared/Badge.astro';
+
+const examples = [
+  {
+    label: 'Variables',
+    traditional: 'x = 10\nprint(x)',
+    kindly: 'With respect to x, let it be 10.\nKindly print x.\nThank you.',
+  },
+  {
+    label: 'Functions',
+    traditional: 'def greet(name):\n\treturn "Hello, " + name\n\nprint(greet("world"))',
+    kindly:
+      'With respect to greet, let it accept name.\n\tKindly return "Hello, " + name.\nThat will be all.\n\nKindly print greet("world").\nThank you.',
+  },
+  {
+    label: 'Collections',
+    traditional: 'colors = ["sage", "clay"]\ncolors.append("ochre")\nprint(colors)',
+    kindly:
+      'With respect to colors, let it be ["sage", "clay"].\nKindly append "ochre" to colors.\nKindly print colors.\nThank you.',
+  },
+];
+---
+
+<div data-examples>
+  <div role="tablist" aria-label="Syntax examples">
+    {
+      examples.map((example, index) => (
+        <Button
+          role="tab"
+          id={`syntax-tab-${index}`}
+          aria-controls={`syntax-panel-${index}`}
+          aria-selected={index === 0}
+          tabindex={index === 0 ? 0 : -1}
+        >
+          {example.label}
+        </Button>
+      ))
+    }
+  </div>
+  {
+    examples.map((example, index) => (
+      <div
+        role="tabpanel"
+        id={`syntax-panel-${index}`}
+        aria-labelledby={`syntax-tab-${index}`}
+        tabindex="0"
+        hidden={index !== 0}
+      >
+        <article>
+          <header>
+            <h3>Traditional programming</h3>
+            <Badge>
+              <CircleAlert aria-hidden="true" />
+              Unprofessional
+            </Badge>
+          </header>
+          <Code code={example.traditional} lang="python" theme="github-light" />
+          <p>Abrupt. Demanding. Completely devoid of workplace etiquette.</p>
+        </article>
+        <article>
+          <header>
+            <h3>Kindly programming</h3>
+            <Badge tone="info">
+              <BadgeCheck aria-hidden="true" />
+              Corporate approved
+            </Badge>
+          </header>
+          <Code code={example.kindly} lang="text" theme="github-light" />
+          <p>Respectful. Considerate. Suitable for all professional environments.</p>
+        </article>
+      </div>
+    ))
+  }
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-examples]').forEach((examples) => {
+    const tabs = [...examples.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const panels = [...examples.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+
+    function selectTab(index: number) {
+      tabs.forEach((tab, tabIndex) => {
+        const selected = tabIndex === index;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        panels[tabIndex].hidden = !selected;
+      });
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTab(index));
+      tab.addEventListener('keydown', (event) => {
+        let next: number;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+
+        event.preventDefault();
+        selectTab(next);
+        tabs[next].focus();
+      });
+    });
+  });
+</script>
+
+<style>
+  [data-examples] {
+    min-width: 0;
+  }
+  [role='tablist'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  [role='tabpanel']:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+  }
+  [role='tabpanel'] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  [role='tabpanel'][hidden] {
+    display: none;
+  }
+  article {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    background: var(--color-surface);
+  }
+  article + article {
+    border-color: var(--color-pale);
+    background: var(--color-tint);
+  }
+  header {
+    margin-bottom: 1.5rem;
+  }
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1.6rem;
+  }
+  article :global(pre) {
+    flex: 1;
+    min-height: 10rem;
+    margin: 0 0 1rem;
+    background: transparent !important;
+    font-size: 0.8rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-accent) transparent;
+  }
+  p {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+  @media (max-width: 700px) {
+    [role='tabpanel'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    article :global(pre) {
+      min-height: 0;
+    }
+  }
+</style>

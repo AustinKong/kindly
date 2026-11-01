@@ -1,0 +1,28 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+import type { ButtonVariant } from './ui-types';
+
+type Props = (HTMLAttributes<'a'> | HTMLAttributes<'button'>) & {
+  href?: string;
+  variant?: ButtonVariant;
+};
+
+const {
+  href,
+  variant = 'secondary',
+  class: className,
+  type = 'button',
+  ...attributes
+} = Astro.props;
+const Tag = href ? 'a' : 'button';
+---
+
+<Tag
+  {...attributes}
+  href={href}
+  type={href ? undefined : type}
+  class:list={['ui-button', className]}
+  data-variant={variant}
+>
+  <slot />
+</Tag>

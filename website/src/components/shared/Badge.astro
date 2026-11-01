@@ -1,0 +1,9 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+import type { BadgeTone } from './ui-types';
+
+type Props = HTMLAttributes<'span'> & { tone?: BadgeTone };
+const { tone = 'neutral', class: className, ...attributes } = Astro.props;
+---
+
+<span {...attributes} class:list={['ui-badge', className]} data-tone={tone}><slot /></span>
