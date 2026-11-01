@@ -43,6 +43,27 @@
         "res://.godot/gdunit-reports"
       ],
       "problemMatcher": []
+    },
+    {
+      "label": "Website: Dev",
+      "type": "npm",
+      "script": "dev:background",
+      "path": "website",
+      "problemMatcher": []
+    },
+    {
+      "label": "Website: Build",
+      "type": "npm",
+      "script": "build",
+      "path": "website",
+      "problemMatcher": []
+    },
+    {
+      "label": "Website: Format Check",
+      "type": "npm",
+      "script": "format:check",
+      "path": "website",
+      "problemMatcher": []
     }
   ]
 }

@@ -1,0 +1,120 @@
+.playground {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.playground-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 65vh;
+  min-height: 24rem;
+  overflow: hidden;
+  border: 1px solid #dedede;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3rem;
+  padding-inline: 1rem;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.source-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.code-editor {
+  height: 100%;
+}
+
+.code-editor .cm-scroller {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.code-editor .cm-content {
+  padding-block: 1rem;
+}
+
+.code-editor .cm-gutters {
+  border-right: 0;
+  background: #fff;
+  color: #888;
+}
+
+.code-editor .cm-editor.cm-focused {
+  outline: 2px solid #64748b;
+  outline-offset: -2px;
+}
+
+.console-output {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console-placeholder {
+  color: #777;
+}
+
+@media (max-width: 48rem) {
+  .playground {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .playground-panel {
+    height: 45vh;
+    min-height: 18rem;
+  }
+}
+
+.run-button {
+  border: 1px solid #242424;
+  border-radius: 0.3rem;
+  padding: 0.3rem 0.9rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: white;
+  background: #242424;
+  cursor: pointer;
+}
+
+.run-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Keep the frame rendered so the Godot frame loop can process deferred calls. */
+.runtime-frame {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}

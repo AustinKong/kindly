@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Runtime</title>
+  </head>
+  <body>
+    <canvas id="canvas" width="1" height="1" tabindex="-1"></canvas>
+    <script src="$GODOT_URL"></script>
+    <script>
+      const engine = new Engine($GODOT_CONFIG);
+      engine
+        .startGame({
+          canvas: document.getElementById('canvas'),
+          canvasResizePolicy: 0,
+          focusCanvas: false,
+          onPrint: () => {},
+          onPrintError: (...messages) => console.error(...messages),
+        })
+        .catch((error) => window.parent.onBridgeError(String(error)));
+    </script>
+  </body>
+</html>

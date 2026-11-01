@@ -1,5 +1,7 @@
 {
   "recommendations": [
-    "geequlim.godot-tools"
+    "geequlim.godot-tools",
+    "astro-build.astro-vscode",
+    "esbenp.prettier-vscode"
   ]
 }

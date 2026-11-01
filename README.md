@@ -45,10 +45,10 @@ Built using Robert Nystrom's [Crafting Interpreters](https://craftinginterpreter
 ## Repository layout
 
 - `runtime/`: the Godot project, language implementation, utilities, addons, and tests. Import `runtime/project.godot` in Godot; its `res://` paths are relative to this directory.
-- `website/`: the browser editor and UI, currently a scaffold. See its [README](website/README.md).
+- `website/`: the Astro/React browser UI. See its [README](website/README.md) for development commands.
 - `docs/`: language documentation.
 
-Godot executes the language; the website will own editing and presentation. The current project has no web bridge or export entry scene yet.
+Godot executes the language; the website will own editing and presentation. The website calls the interpreter through a Godot JavaScriptBridge web entry scene.
 
 ## Getting Started
 
@@ -61,7 +61,7 @@ godot --headless --editor --path runtime --import --quit
 godot --editor --path runtime
 ```
 
-Use your Godot executable's full path if `godot` is not on `PATH`. This repository contains the interpreter source; there is no default main scene or standalone CLI.
+Use your Godot executable's full path if `godot` is not on `PATH`. The default main scene hosts the browser bridge. It exposes callbacks in a web export; it has no native UI or standalone CLI.
 
 From a GDScript in the project, run source through `Interpreter`:
 

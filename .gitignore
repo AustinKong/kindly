@@ -15,6 +15,11 @@ dump/
 # Website dependencies and generated builds
 node_modules/
 /website/dist/
+/website/.astro/
+/website/.env*
+!/website/.env.example
 
 # Godot exports (generated, not source)
 /runtime/build/
+
+/website/public/runtime/
