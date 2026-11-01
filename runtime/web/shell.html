@@ -11,6 +11,7 @@
       const engine = new Engine($GODOT_CONFIG);
       engine
         .startGame({
+          args: ['--headless'],
           canvas: document.getElementById('canvas'),
           canvasResizePolicy: 0,
           focusCanvas: false,

@@ -14,7 +14,10 @@
     "format:check": "prettier --check .",
     "dev:background": "astro dev --background",
     "runtime:export": "node scripts/export-runtime.mjs",
-    "build:site": "astro build"
+    "runtime:template": "python scripts/build-template.py",
+    "build:site": "astro build",
+    "preview:cloudflare": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.2",
@@ -35,6 +38,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "prettier": "^3.8.3",
-    "prettier-plugin-astro": "^0.14.1"
+    "prettier-plugin-astro": "^0.14.1",
+    "wrangler": "^4.156.0"
   }
 }

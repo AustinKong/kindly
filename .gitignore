@@ -16,6 +16,7 @@ dump/
 node_modules/
 /website/dist/
 /website/.astro/
+/website/.wrangler/
 /website/.env*
 !/website/.env.example
 
