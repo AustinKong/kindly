@@ -1,45 +1,28 @@
 extends "res://engine/frontend/compiler.gd"
 
-const PHRASES = {
-	"greeting": ["dear", "compiler"],
-	"signoff": ["best", "regards"],
-	"var": ["please", "let"],
-	"define": ["please", "define"],
-	"update": ["please", "update"],
-	"execute": ["kindly", "execute"],
-	"return": ["kindly", "return"],
-	"break": ["kindly", "cease"],
-	"continue": ["kindly", "proceed"],
-	"if": ["with", "respect", "to"],
-	"elif": ["alternatively", ",", "if"],
-	"else": ["otherwise"],
-	"while": ["as", "long", "as"],
-	"for": ["for", "each"],
-}
-
 var _updating := false
 var _did_update := false
 var _expression_depth := 0
 
 
 func _parse_program() -> void:
-	_consume_phrase(PHRASES.greeting, "Expect 'Dear Compiler,' at the start of the program.")
+	_consume(Token.Type.GREETING, "Expect 'Dear Compiler,' at the start of the program.")
 	_consume(Token.Type.COMMA, "Expect ',' after 'Dear Compiler'.")
 	_consume(Token.Type.NEWLINE, "Expect newline after greeting.")
-	while _compile_error == null and _current().type != Token.Type.EOF and not _check_phrase(PHRASES.signoff):
+	while _compile_error == null and _current().type != Token.Type.EOF and _current().type != Token.Type.SIGNOFF:
 		_parse_declaration()
-	_consume_phrase(PHRASES.signoff, "Expect 'Best regards.' at the end of the program.")
+	_consume(Token.Type.SIGNOFF, "Expect 'Best regards.' at the end of the program.")
 	_consume(Token.Type.DOT, "Expect '.' after 'Best regards'.")
 	_consume(Token.Type.NEWLINE, "Expect newline after sign-off.")
 	_consume(Token.Type.EOF, "Sign-off must be the last statement.")
 
 
 func _parse_declaration() -> void:
-	if _match_phrase(PHRASES.var):
+	if _match(Token.Type.VAR):
 		_parse_variable_declaration()
-	elif _match_phrase(PHRASES.define):
+	elif _match(Token.Type.DEF):
 		_parse_function_declaration()
-	elif _match_phrase(PHRASES.update):
+	elif _match(Token.Type.UPDATE):
 		_updating = true
 		_did_update = false
 		_parse_expression()
@@ -53,29 +36,29 @@ func _parse_declaration() -> void:
 
 
 func _parse_statement() -> void:
-	if _match_phrase(PHRASES.if):
+	if _match(Token.Type.IF):
 		_parse_if_statement()
-	elif _match_phrase(PHRASES.while):
+	elif _match(Token.Type.WHILE):
 		_parse_while_statement()
-	elif _match_phrase(PHRASES.for):
+	elif _match(Token.Type.FOR):
 		_parse_for_statement()
-	elif _match_phrase(PHRASES.return):
+	elif _match(Token.Type.RETURN):
 		if _enclosing == null:
 			_error("Cannot return from top-level code.", _previous())
 			return
 		_parse_return_statement()
-	elif _match_phrase(PHRASES.break):
+	elif _match(Token.Type.BREAK):
 		_parse_loop_jump(true)
-	elif _match_phrase(PHRASES.continue):
+	elif _match(Token.Type.CONTINUE):
 		_parse_loop_jump(false)
-	elif _match_phrase(PHRASES.execute):
+	elif _match(Token.Type.EXECUTE):
 		_parse_expression_statement()
 	else:
 		_error("Expected a courteous statement.")
 
 
 func _parse_initializer() -> void:
-	_consume_phrase(["be"], "Expect 'be' after variable name.")
+	_consume_word("be", "Expect 'be' after variable name.")
 	_parse_expression()
 
 
@@ -103,7 +86,7 @@ func _parse_expression(min_bp: int = 0) -> bool:
 
 
 func _match_assignment() -> bool:
-	if _updating and _expression_depth == 1 and _match_phrase(["to"]):
+	if _updating and _expression_depth == 1 and _match_word("to"):
 		_updating = false
 		_did_update = true
 		return true
@@ -120,35 +103,22 @@ func _for_declares_counter() -> bool:
 
 func _match_keyword(type: Token.Type) -> bool:
 	match type:
-		Token.Type.ELIF: return _match_phrase(PHRASES.elif)
-		Token.Type.ELSE: return _match_phrase(PHRASES.else)
-		Token.Type.EQUAL: return _match_phrase(["from"])
-		Token.Type.TO: return _match_phrase(["to"])
-		Token.Type.STEP: return _match_phrase(["step"])
-	return false
+		Token.Type.EQUAL: return _match_word("from")
+		Token.Type.TO: return _match_word("to")
+		Token.Type.STEP: return _match_word("step")
+	return _match(type)
 
 
-func _check_phrase(words: Array) -> bool:
-	for offset in range(words.size()):
-		var token := _tokens[mini(_token_index + offset, _tokens.size() - 1)]
-		if words[offset] == ",":
-			if token.type != Token.Type.COMMA:
-				return false
-		elif token.type != Token.Type.IDENTIFIER or _source.substr(token.start, token.length).to_lower() != words[offset]:
-			return false
-	return true
-
-
-func _match_phrase(words: Array) -> bool:
-	if not _check_phrase(words):
+func _match_word(word: String) -> bool:
+	var token := _current()
+	if token.type != Token.Type.IDENTIFIER or _source.substr(token.start, token.length).to_lower() != word:
 		return false
-	for word in words:
-		_advance()
+	_advance()
 	return true
 
 
-func _consume_phrase(words: Array, message: String) -> bool:
-	if _match_phrase(words):
+func _consume_word(word: String, message: String) -> bool:
+	if _match_word(word):
 		return true
 	_error(message)
 	return false

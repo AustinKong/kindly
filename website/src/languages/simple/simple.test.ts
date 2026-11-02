@@ -104,7 +104,7 @@ test('unchanged highlights stay mapped while a new response is pending', () => {
   assert.equal(current.field(tokenState).tokens.length, 0);
 });
 
-test('frontend completions use bridge token context and retain snippets', async () => {
+test('frontend completions use bridge token context without templates', async () => {
   const ready = state('', []);
   const result = await simpleCompletions(new CompletionContext(ready, 0, true));
   assert.ok(result);
@@ -112,7 +112,7 @@ test('frontend completions use bridge token context and retain snippets', async 
   for (const word of [...keywords, ...builtins.map(({ name }) => name)])
     assert.ok(labels.includes(word));
   for (const word of ['in', 'range', 'class', 'import']) assert.ok(!labels.includes(word));
-  assert.equal(typeof result.options.find((option) => option.label === 'for')?.apply, 'function');
+  assert.ok(result.options.every((option) => option.apply === undefined));
   for (const kind of ['string', 'comment'] as const) {
     const source = kind === 'string' ? '"pr' : '# pr';
     const current = state(source, [{ start: 0, length: source.length, kind }]);
@@ -145,10 +145,10 @@ test('indentation uses bridge punctuation and remains responsive while pending',
   assert.equal(getIndentation(pending, pending.doc.length), 4);
 });
 
-test('Kindly phrases complete as a whole and strings suppress suggestions', async () => {
+test('Kindly completes words without templates and suppresses suggestions in strings', async () => {
   const { kindly, kindlyCompletions } = await import('../kindly/index.ts');
   const { language } = await import('../tokenization.ts');
-  const source = 'Please le';
+  const source = 'Ple';
   let current = EditorState.create({
     doc: source,
     extensions: [tokenization, language.of('kindly'), kindly()],
@@ -162,10 +162,8 @@ test('Kindly phrases complete as a whole and strings suppress suggestions', asyn
   }).state;
   const result = await kindlyCompletions(new CompletionContext(current, source.length, true));
   assert.equal(result?.from, 0);
-  assert.deepEqual(
-    result?.options.map((option) => option.label),
-    ['Please let']
-  );
+  assert.ok(result?.options.some((option) => option.label === 'Please'));
+  assert.ok(result?.options.every((option) => option.apply === undefined));
   current = current.update({
     effects: setTokens.of({
       language: 'kindly',

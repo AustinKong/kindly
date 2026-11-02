@@ -18,6 +18,8 @@ enum Type {
 	# Keywords.
 	AND, BREAK, CONTINUE, DEF, ELIF, ELSE, FALSE, FOR, IF,
 	NONE, NOT, OR, RETURN, STEP, TO, TRUE, VAR, WHILE,
+	# Kindly statement forms without a Simple equivalent.
+	GREETING, SIGNOFF, UPDATE, EXECUTE,
 	# Whitespace.
 	DEDENT, INDENT, NEWLINE,
 	# Misc.

@@ -71,6 +71,8 @@ func _execute(function: CompiledFunction) -> RuntimeError:
 
 				if typeof(left) == TYPE_STRING and typeof(right) == TYPE_STRING:
 					_stack.push_back(left + right)
+				elif (left is String and typeof(right) in NUMBER_TYPES) or (right is String and typeof(left) in NUMBER_TYPES):
+					_stack.push_back(str(left) + str(right))
 				elif typeof(left) in NUMBER_TYPES and typeof(right) in NUMBER_TYPES:
 					_stack.push_back(left + right)
 				else:

@@ -7,7 +7,7 @@ const ScanError = preload("res://engine/frontend/scan_error.gd")
 # - Source string is tab indented, enforced by host application.
 # - Source string uses "\n" instead of "\r\n", enforced by host application.
 
-# Courtesy phrases are matched contextually by the compiler, not reserved here.
+# Expression keywords are reserved; statement phrases are recognized only at line start.
 static var KEYWORD_TRIE: Trie = Trie.new({
 	"and": Token.Type.AND,
 	"false": Token.Type.FALSE,
@@ -16,6 +16,24 @@ static var KEYWORD_TRIE: Trie = Trie.new({
 	"or": Token.Type.OR,
 	"true": Token.Type.TRUE,
 })
+
+static var PHRASE_TRIE: Trie = Trie.new({
+	"dear compiler": Token.Type.GREETING,
+	"best regards": Token.Type.SIGNOFF,
+	"please let": Token.Type.VAR,
+	"please define": Token.Type.DEF,
+	"please update": Token.Type.UPDATE,
+	"kindly execute": Token.Type.EXECUTE,
+	"kindly return": Token.Type.RETURN,
+	"kindly cease": Token.Type.BREAK,
+	"kindly proceed": Token.Type.CONTINUE,
+	"with respect to": Token.Type.IF,
+	"alternatively, if": Token.Type.ELIF,
+	"otherwise": Token.Type.ELSE,
+	"as long as": Token.Type.WHILE,
+	"for each": Token.Type.FOR,
+})
+
 
 var _source: String
 var _start: int = 0
@@ -163,6 +181,7 @@ func scan_token() -> Variant:
 
 	# A token on a continuation line also ends its physical line-start state.
 	_needs_line_start_processing = false
+	var at_statement_start := not _has_code_on_line and _brackets.is_empty()
 	_has_code_on_line = true
 
 	var chr := _advance()
@@ -173,7 +192,7 @@ func scan_token() -> Variant:
 
 	# Keywords and identifiers.
 	if StringUtils.is_alpha(chr):
-		return _scan_identifier()
+		return _scan_identifier(at_statement_start)
 
 	match chr:
 		# Single-character tokens.
@@ -235,13 +254,17 @@ func _scan_number() -> Token:
 	return _build_token(Token.Type.NUMBER)
 
 
-## Only expression keywords are case-insensitive; identifier spelling is preserved by spans.
-func _scan_identifier() -> Token:
+## Preserve original spans while matching keywords and phrases without case.
+func _scan_identifier(at_statement_start: bool) -> Token:
 	# Allow digits after the first character.
 	while StringUtils.is_alpha(_peek()) or StringUtils.is_digit(_peek()):
 		_advance()
 
 	var keyword := _source.substr(_start, _current - _start)
+	if at_statement_start:
+		var phrase_type: Variant = _scan_phrase(keyword.to_lower())
+		if phrase_type != null:
+			return _build_token(phrase_type)
 	var token_type: Variant = KEYWORD_TRIE.search(keyword.to_lower())
 
 	# Enum value of 0 is falsy, use != comparison.
@@ -249,6 +272,37 @@ func _scan_identifier() -> Token:
 		return _build_token(token_type)
 
 	return _build_token(Token.Type.IDENTIFIER)
+
+
+
+## Match whole words on the same line, allowing spaces or tabs between them.
+## Failed lookahead leaves the following source untouched.
+func _scan_phrase(phrase: String) -> Variant:
+	var matched_type: Variant = null
+	var matched_end := _current
+	while PHRASE_TRIE.has_prefix(phrase):
+		var type: Variant = PHRASE_TRIE.search(phrase)
+		if type != null:
+			matched_type = type
+			matched_end = _current
+		var separated := false
+		while _peek() in [" ", "\t"]:
+			_advance()
+			separated = true
+		if _peek() == ",":
+			_advance()
+			phrase += ","
+			separated = true
+			while _peek() in [" ", "\t"]:
+				_advance()
+		if not separated or not StringUtils.is_alpha(_peek()):
+			break
+		var word_start := _current
+		while StringUtils.is_alpha(_peek()) or StringUtils.is_digit(_peek()):
+			_advance()
+		phrase += " " + _source.substr(word_start, _current - word_start).to_lower()
+	_current = matched_end
+	return matched_type
 
 
 ## Scans a single-line string after its opening quote has been consumed.

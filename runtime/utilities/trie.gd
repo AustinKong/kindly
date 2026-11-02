@@ -33,3 +33,13 @@ func search(key: String) -> Variant:
 		curr = curr[chr]
 
 	return curr.get(SENTINEL)
+
+
+## Whether key is the beginning of an entry, including a complete entry.
+func has_prefix(key: String) -> bool:
+	var curr := _root
+	for chr in key:
+		if not chr in curr:
+			return false
+		curr = curr[chr]
+	return true

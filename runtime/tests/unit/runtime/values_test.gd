@@ -25,6 +25,30 @@ func test_numeric_operations_preserve_types_and_precision() -> void:
 		assert_int(typeof(result.output[0])).is_equal(typeof(sample[3]))
 
 
+func test_string_concatenation_accepts_numbers_in_either_order() -> void:
+	for sample in [
+		["count: ", 3, "count: 3"],
+		[3, " items", "3 items"],
+		["", 0, "0"],
+		[-12, "", "-12"],
+		["value: ", 2.5, "value: 2.5"],
+		[2.5, " units", "2.5 units"],
+		["", 9007199254740993, "9007199254740993"],
+		[9223372036854775807, "", "9223372036854775807"],
+	]:
+		var result := B.evaluate([[O.CONSTANT, sample[0]], [O.CONSTANT, sample[1]], [O.ADD]])
+		assert_that(result.error).is_null()
+		assert_array(result.output).is_equal([sample[2]])
+		assert_int(typeof(result.output[0])).is_equal(TYPE_STRING)
+
+
+func test_string_concatenation_rejects_non_numeric_values() -> void:
+	for value in [true, null, [], {}]:
+		for operands in [["value: ", value], [value, " suffix"]]:
+			var result := B.evaluate([[O.CONSTANT, operands[0]], [O.CONSTANT, operands[1]], [O.ADD]])
+			assert_bool(result.error is RuntimeError).is_true()
+
+
 func test_truncated_remainder_signs_and_integer_boundary() -> void:
 	for sample in [
 		[7, 3, 1],

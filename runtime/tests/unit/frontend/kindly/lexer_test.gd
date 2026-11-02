@@ -31,25 +31,25 @@ func _error(source: String, message: String, line: int, start: int, length: int)
 		assert_int(result.length).is_equal(length)
 
 
-func test_email_envelope_preserves_words_and_required_punctuation() -> void:
+func test_email_envelope_has_phrase_tokens_and_required_punctuation() -> void:
 	var source := "\nDear Compiler,\n\nBest regards.\n"
 	assert_array(_types(source)).is_equal([
-		Token.Type.IDENTIFIER, Token.Type.IDENTIFIER, Token.Type.COMMA, Token.Type.NEWLINE,
-		Token.Type.IDENTIFIER, Token.Type.IDENTIFIER, Token.Type.DOT, Token.Type.NEWLINE,
+		Token.Type.GREETING, Token.Type.COMMA, Token.Type.NEWLINE,
+		Token.Type.SIGNOFF, Token.Type.DOT, Token.Type.NEWLINE,
 		Token.Type.EOF,
 	])
-	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal(["Dear", "Compiler", "Best", "regards"])
+	assert_array(_lexemes(source, Token.Type.GREETING)).is_equal(["Dear Compiler"])
+	assert_array(_lexemes(source, Token.Type.SIGNOFF)).is_equal(["Best regards"])
 	var tokens := _scan(source)
 	assert_int(tokens[0].line).is_equal(1)
 	assert_int(tokens[0].start).is_equal(1)
-	assert_int(tokens[4].line).is_equal(3)
+	assert_int(tokens[3].line).is_equal(3)
 
 
 func test_courtesy_words_are_contextual_identifiers() -> void:
 	var source := "Please let update be 10.\nPlease update update to 20.\nKindly execute print(update).\n"
 	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal([
-		"Please", "let", "update", "be", "Please", "update", "update", "to",
-		"Kindly", "execute", "print", "update",
+		"update", "be", "update", "to", "print", "update",
 	])
 	for word in ["let", "be", "update", "to", "define", "print", "from", "step", "if", "var", "return"]:
 		assert_int(_scan(word)[0].type).is_equal(Token.Type.IDENTIFIER)
@@ -58,9 +58,11 @@ func test_courtesy_words_are_contextual_identifiers() -> void:
 func test_all_fixed_phrase_words_keep_their_original_case() -> void:
 	var source := "pLeAsE LeT Employee bE 10.\nPLEASE UPDATE employee TO 20.\nKiNdLy ExEcUtE PRINT(Employee).\n"
 	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal([
-		"pLeAsE", "LeT", "Employee", "bE", "PLEASE", "UPDATE", "employee", "TO",
-		"KiNdLy", "ExEcUtE", "PRINT", "Employee",
+		"Employee", "bE", "employee", "TO", "PRINT", "Employee",
 	])
+	assert_array(_lexemes(source, Token.Type.VAR)).is_equal(["pLeAsE LeT"])
+	assert_array(_lexemes(source, Token.Type.UPDATE)).is_equal(["PLEASE UPDATE"])
+	assert_array(_lexemes(source, Token.Type.EXECUTE)).is_equal(["KiNdLy ExEcUtE"])
 
 
 func test_expression_keywords_are_ascii_case_insensitive() -> void:
@@ -83,19 +85,22 @@ func test_identifier_boundaries_and_case_are_preserved() -> void:
 
 func test_print_is_an_ordinary_function_identifier() -> void:
 	assert_array(_types("Kindly execute print(value).\n")).is_equal([
-		Token.Type.IDENTIFIER, Token.Type.IDENTIFIER, Token.Type.IDENTIFIER,
+		Token.Type.EXECUTE, Token.Type.IDENTIFIER,
 		Token.Type.LEFT_PARENTHESES, Token.Type.IDENTIFIER, Token.Type.RIGHT_PARENTHESES,
 		Token.Type.DOT, Token.Type.NEWLINE, Token.Type.EOF,
 	])
 
 
-func test_branch_and_loop_phrases_are_not_collapsed_or_rewritten() -> void:
+func test_branch_and_loop_phrases_are_single_tokens() -> void:
 	var source := "Alternatively, if approved:\n\tKindly proceed.\nFor each i from 0 to 10 step 2:\n\tKindly cease.\n"
 	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal([
-		"Alternatively", "if", "approved", "Kindly", "proceed", "For", "each", "i",
-		"from", "to", "step", "Kindly", "cease",
+		"approved", "i", "from", "to", "step",
 	])
-	assert_int(_scan(source).filter(func(token): return token.type == Token.Type.COMMA).size()).is_equal(1)
+	assert_int(_scan(source).filter(func(token): return token.type == Token.Type.COMMA).size()).is_equal(0)
+	assert_array(_lexemes(source, Token.Type.ELIF)).is_equal(["Alternatively, if"])
+	assert_array(_lexemes(source, Token.Type.FOR)).is_equal(["For each"])
+	assert_array(_lexemes(source, Token.Type.CONTINUE)).is_equal(["Kindly proceed"])
+	assert_array(_lexemes(source, Token.Type.BREAK)).is_equal(["Kindly cease"])
 
 
 func test_decimal_period_and_statement_period_are_distinct_tokens() -> void:
@@ -113,7 +118,7 @@ func test_periods_after_indexing_and_calls_remain_sentence_tokens() -> void:
 	assert_array(_lexemes(source, Token.Type.DOT)).is_equal([".", ".", "."])
 	assert_array(_lexemes(source, Token.Type.NUMBER)).is_equal(["0"])
 	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal([
-		"Kindly", "execute", "print", "items", "object", "name",
+		"print", "items", "object", "name",
 	])
 
 
@@ -238,7 +243,68 @@ func test_editor_mode_silently_recovers_incomplete_kindly_source() -> void:
 
 
 func test_envelope_and_statement_grammar_are_left_to_the_compiler() -> void:
-	# These are lexically valid; the future compiler must reject malformed programs.
+	# Token recognition does not validate program structure.
 	for source in ["", "Please let x be 1", "Kindly print x.", "Dear Compiler\nBest regards", "For the duration of i from 0 to 10:"]:
 		var result: Variant = Lexer.new(source).scan()
 		assert_bool(result is Array).is_true()
+
+
+func test_all_statement_phrases_use_the_shared_token_types() -> void:
+	for sample in [
+		["Dear Compiler", Token.Type.GREETING], ["Best regards", Token.Type.SIGNOFF],
+		["Please let", Token.Type.VAR], ["Please define", Token.Type.DEF],
+		["Please update", Token.Type.UPDATE], ["Kindly execute", Token.Type.EXECUTE],
+		["Kindly return", Token.Type.RETURN], ["Kindly cease", Token.Type.BREAK],
+		["Kindly proceed", Token.Type.CONTINUE], ["With respect to", Token.Type.IF],
+		["Alternatively, if", Token.Type.ELIF], ["Otherwise", Token.Type.ELSE],
+		["As long as", Token.Type.WHILE], ["For each", Token.Type.FOR],
+	]:
+		var tokens := _scan(sample[0])
+		assert_array(tokens.map(func(token): return token.type)).is_equal([sample[1], Token.Type.NEWLINE, Token.Type.EOF])
+		assert_int(tokens[0].start).is_equal(0)
+		assert_int(tokens[0].length).is_equal(sample[0].length())
+
+
+func test_phrase_whitespace_case_and_source_locations_are_preserved() -> void:
+	for sample in [
+		["FoR  \teach", Token.Type.FOR],
+		["With\trespect  TO", Token.Type.IF],
+		["ALTERNATIVELY ,\tIF", Token.Type.ELIF],
+		["Alternatively,if", Token.Type.ELIF],
+	]:
+		var source: String = "# intro\n\t" + sample[0] + " value:\n"
+		var token: Variant = _scan(source)[1]
+		assert_int(token.type).is_equal(sample[1])
+		assert_int(token.line).is_equal(1)
+		assert_int(token.start).is_equal(source.find(sample[0]))
+		assert_int(token.length).is_equal(sample[0].length())
+		assert_str(source.substr(token.start, token.length)).is_equal(sample[0])
+
+
+func test_phrase_boundaries_and_failed_lookahead_leave_identifiers_intact() -> void:
+	for source in ["For eachThing i", "For each2 i", "Please letx value", "With respect toad", "Kindly executex print"]:
+		assert_bool(_scan(source).all(func(token): return token.type in [Token.Type.IDENTIFIER, Token.Type.NEWLINE, Token.Type.EOF])).is_true()
+	assert_array(_lexemes("For eachThing i", Token.Type.IDENTIFIER)).is_equal(["For", "eachThing", "i"])
+	for source in ["For\neach", "For # note\neach", "With respect\nto", "Please\nlet"]:
+		assert_bool(_scan(source).all(func(token): return token.type in [Token.Type.IDENTIFIER, Token.Type.NEWLINE, Token.Type.EOF])).is_true()
+
+
+func test_phrases_only_match_at_logical_statement_start() -> void:
+	var source := "Please let each be [\nFor each, Otherwise\n].\nKindly execute print(Please, let, Otherwise).\n"
+	var tokens := _scan(source)
+	assert_int(tokens.filter(func(token): return token.type == Token.Type.FOR).size()).is_equal(0)
+	assert_int(tokens.filter(func(token): return token.type == Token.Type.ELSE).size()).is_equal(0)
+	assert_array(_lexemes(source, Token.Type.VAR)).is_equal(["Please let"])
+	assert_array(_lexemes(source, Token.Type.EXECUTE)).is_equal(["Kindly execute"])
+	assert_array(_lexemes(source, Token.Type.IDENTIFIER)).is_equal(["each", "be", "For", "each", "Otherwise", "print", "Please", "let", "Otherwise"])
+
+
+func test_incomplete_phrases_recover_for_editor_tokenization() -> void:
+	for source in ["For", "For ", "For\t", "For e", "Alternatively,", "With respect", "Please"]:
+		var tokens := Lexer.new(source).scan_for_editor()
+		assert_int(tokens[0].type).is_equal(Token.Type.IDENTIFIER)
+		assert_int(tokens[0].start).is_equal(0)
+	var complete := Lexer.new("For each").scan_for_editor()
+	assert_int(complete.size()).is_equal(1)
+	assert_int(complete[0].type).is_equal(Token.Type.FOR)
+	assert_int(complete[0].length).is_equal(8)

@@ -9,6 +9,19 @@ func _initialize() -> void:
 	run_tests.call_deferred()
 
 func run_tests() -> void:
+	for sample in [
+		['"Count: " + 3', "Count: 3"],
+		['3 + " items"', "3 items"],
+		['"total: " + (2 + 3)', "total: 5"],
+		['1 + 2 + " items"', "3 items"],
+		['"items: " + 1 + 2', "items: 12"],
+		['"amount: " + 2.5', "amount: 2.5"],
+	]:
+		for language in ["simple", "kindly"]:
+			var source: String = "print(" + sample[0] + ")\n" if language == "simple" else "Dear Compiler,\nKindly execute print(" + sample[0] + ").\nBest regards.\n"
+			var output: Array[String] = []
+			var error: Variant = LanguageInterpreter.new(language).interpret(source, func(text: String) -> void: output.append(text))
+			expect(error == null and output == [sample[1]], language + " string concatenation: " + sample[0])
 	for test_case in [
 		["Please let message be \"Hello\".\nKindly execute print(message).", ["Hello"]],
 		["pLeAsE LeT x bE 10.5.\nPlease update x to x + 1.\nKindly execute print(x).", ["11.5"]],
@@ -38,7 +51,7 @@ func run_tests() -> void:
 	expect(LanguageInterpreter.new("unknown").interpret("") is CompileError, "Unknown languages are rejected")
 	expect(LanguageInterpreter.new("simple").interpret("var x = 1\nprint(x)\n") == null, "Explicit Simple remains runnable")
 	var tokens := EditorTokens.tokenize("Please let message be \"hello\".\nKindly execute print(message).", "kindly", 7)
-	expect(tokens.language == "kindly" and tokens.revision == 7 and tokens.tokens[0].kind == "keyword" and tokens.tokens[2].kind == "definition", "Kindly contextual highlighting")
+	expect(tokens.language == "kindly" and tokens.revision == 7 and tokens.tokens[0].kind == "keyword" and tokens.tokens[1].kind == "definition", "Kindly contextual highlighting")
 	print("Language tests: %d failures" % failed)
 	quit(0 if failed == 0 else 1)
 
