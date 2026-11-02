@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Check, CircleAlert, Inbox, Mail, Trash2 } from 'lucide-react';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
@@ -19,6 +20,11 @@ type Props = {
 };
 
 export default function Console({ replies, selectedId, bridgeError, onSelect, onClear }: Props) {
+  const inbox = useRef<HTMLUListElement>(null);
+  const newestReplyId = replies[0]?.id;
+  useEffect(() => {
+    if (inbox.current) inbox.current.scrollTop = 0;
+  }, [newestReplyId]);
   const selected = replies.find((reply) => reply.id === selectedId);
   return (
     <section aria-labelledby="console-heading">
@@ -38,7 +44,7 @@ export default function Console({ replies, selectedId, bridgeError, onSelect, on
       </header>
       {bridgeError && <p role="alert">{bridgeError}</p>}
       {replies.length > 0 && (
-        <ul className="inbox-messages" aria-label="Execution replies">
+        <ul ref={inbox} className="inbox-messages" aria-label="Execution replies">
           {replies.map((reply) => (
             <li key={reply.id}>
               <Button
@@ -61,7 +67,7 @@ export default function Console({ replies, selectedId, bridgeError, onSelect, on
         </ul>
       )}
       {selected ? (
-        <article className="reply" aria-label="Selected execution reply">
+        <article key={selected.id} className="reply" aria-label="Selected execution reply">
           <header>
             <span className="avatar">
               <Mail aria-hidden="true" />

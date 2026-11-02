@@ -24,7 +24,7 @@ export type EditorDiagnostic = { language: Language; source: string; error: RunR
 
 type Props = {
   language: Language;
-  initialSource: string;
+  source: string;
   onLanguageChange: (language: Language) => void;
   onSourceChange: (source: string) => void;
   status: EditorStatus;
@@ -55,7 +55,7 @@ const extensions = [
 
 export default function Editor({
   language,
-  initialSource,
+  source,
   onLanguageChange,
   onSourceChange,
   status,
@@ -66,14 +66,6 @@ export default function Editor({
   const languageExtensions = useMemo(
     () => [languageFacet.of(language), language === 'kindly' ? kindly() : simple(), ...extensions],
     [language]
-  );
-  const [source, setSource] = useState(initialSource);
-  const handleSourceChange = useCallback(
-    (source: string) => {
-      setSource(source);
-      onSourceChange(source);
-    },
-    [onSourceChange]
   );
   const [subject, setSubject] = useState('A small request');
   const [vimEnabled, setVimEnabled] = useState(false);
@@ -168,7 +160,13 @@ export default function Editor({
           aria-label="Send and run code"
         >
           <Send aria-hidden="true" />
-          {status === 'loading' ? 'Connecting…' : status === 'running' ? 'Sending…' : 'Send'}
+          {status === 'loading'
+            ? 'Connecting…'
+            : status === 'running'
+              ? 'Sending…'
+              : status === 'error'
+                ? 'Unavailable'
+                : 'Send'}
         </Button>
       </header>
       <div className="compose-fields">
@@ -184,10 +182,19 @@ export default function Editor({
       </div>
       <div className="source-body">
         <CodeMirror
+          key={language}
           ref={editor}
           className="code-editor"
           value={source}
-          onChange={handleSourceChange}
+          onChange={onSourceChange}
+          onCreateEditor={(view) =>
+            view.dispatch({
+              effects: [
+                vimMode.reconfigure(vimEnabled ? Prec.high(vim()) : []),
+                indentation.reconfigure([indentUnit.of('\t'), EditorState.tabSize.of(tabSize)]),
+              ],
+            })
+          }
           onUpdate={handleEditorUpdate}
           extensions={languageExtensions}
           height="100%"

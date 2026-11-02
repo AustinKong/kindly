@@ -15,10 +15,10 @@ function urlLanguage(): Language {
 
 export default function Playground() {
   const [language, setLanguage] = useState<Language>('kindly');
-  const drafts = useRef({ simple: simpleSource, kindly: kindlySource });
+  const [drafts, setDrafts] = useState({ simple: simpleSource, kindly: kindlySource });
   const handleSourceChange = useCallback(
     (source: string) => {
-      drafts.current[language] = source;
+      setDrafts((previous) => ({ ...previous, [language]: source }));
     },
     [language]
   );
@@ -109,9 +109,8 @@ export default function Playground() {
       <Navigation active={language} />
       <div className="playground">
         <Editor
-          key={language}
           language={language}
-          initialSource={drafts.current[language]}
+          source={drafts[language]}
           onLanguageChange={changeLanguage}
           onSourceChange={handleSourceChange}
           status={status}

@@ -54,6 +54,8 @@ export function mountRuntime(callbacks: {
   onBridgeError: (message: string) => void;
 }) {
   const controller = new AbortController();
+  const reportConnectionError = () =>
+    callbacks.onBridgeError('Unable to connect to the interpreter. Reload the page to try again.');
 
   const frame = document.createElement('iframe');
   frame.className = 'runtime-frame';
@@ -66,15 +68,15 @@ export function mountRuntime(callbacks: {
     try {
       callbacks.onDone(JSON.parse(json) as RunResult);
     } catch {
-      callbacks.onBridgeError('Unable to read the execution result.');
+      reportConnectionError();
     }
   };
-  window.onBridgeError = callbacks.onBridgeError;
+  window.onBridgeError = reportConnectionError;
   window.onTokens = (json) => {
     try {
       callbacks.onTokens(JSON.parse(json) as TokenizeResult);
     } catch {
-      callbacks.onBridgeError('Unable to read the tokenization result.');
+      reportConnectionError();
     }
   };
 
@@ -86,12 +88,8 @@ export function mountRuntime(callbacks: {
       frame.src = '/runtime/index.html';
       document.body.append(frame);
     })
-    .catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        callbacks.onBridgeError(
-          error instanceof Error ? error.message : 'Unable to load the runtime.'
-        );
-      }
+    .catch(() => {
+      if (!controller.signal.aborted) reportConnectionError();
     });
 
   // Return cleanup function for React's useEffect.
