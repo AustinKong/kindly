@@ -144,3 +144,50 @@ test('indentation uses bridge punctuation and remains responsive while pending',
   const pending = state('if True:\n');
   assert.equal(getIndentation(pending, pending.doc.length), 4);
 });
+
+test('Kindly phrases complete as a whole and strings suppress suggestions', async () => {
+  const { kindly, kindlyCompletions } = await import('../kindly/index.ts');
+  const { language } = await import('../tokenization.ts');
+  const source = 'Please le';
+  let current = EditorState.create({
+    doc: source,
+    extensions: [tokenization, language.of('kindly'), kindly()],
+  });
+  current = current.update({
+    effects: setTokens.of({ language: 'simple', revision: 0, tokens: [] }),
+  }).state;
+  assert.equal(current.field(tokenState).ready, false);
+  current = current.update({
+    effects: setTokens.of({ language: 'kindly', revision: 0, tokens: [] }),
+  }).state;
+  const result = await kindlyCompletions(new CompletionContext(current, source.length, true));
+  assert.equal(result?.from, 0);
+  assert.deepEqual(
+    result?.options.map((option) => option.label),
+    ['Please let']
+  );
+  current = current.update({
+    effects: setTokens.of({
+      language: 'kindly',
+      revision: 0,
+      tokens: [{ start: 0, length: source.length, kind: 'string' }],
+    }),
+  }).state;
+  assert.equal(await kindlyCompletions(new CompletionContext(current, source.length, true)), null);
+});
+
+test('switching editor instances cannot accept an earlier token reply', async () => {
+  const { revisionClock } = await import('../tokenization.ts');
+  let revision = 0;
+  const extensions = [tokenization, revisionClock.of(() => ++revision)];
+  const first = EditorState.create({ doc: 'old', extensions });
+  const second = EditorState.create({ doc: 'new', extensions });
+  const updated = second.update({
+    effects: setTokens.of({
+      language: 'simple',
+      revision: first.field(tokenState).revision,
+      tokens: [],
+    }),
+  }).state;
+  assert.equal(updated.field(tokenState).ready, false);
+});

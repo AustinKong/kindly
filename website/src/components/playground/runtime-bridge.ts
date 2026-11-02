@@ -1,5 +1,8 @@
+export type Language = 'simple' | 'kindly';
+
 export type RunResult = {
   runId: number;
+  language: Language;
   ok: boolean;
   output: string[];
   error: {
@@ -28,15 +31,15 @@ export type TokenKind =
   | 'invalid';
 
 export type TokenizeResult = {
-  language: 'simple';
+  language: Language;
   revision: number;
   tokens: { start: number; length: number; kind: TokenKind }[];
 };
 
 declare global {
   interface Window {
-    run?: (source: string, runId: number) => void;
-    tokenize?: (source: string, language: 'simple', revision: number) => void;
+    run?: (source: string, language: Language, runId: number) => void;
+    tokenize?: (source: string, language: Language, revision: number) => void;
     onTokens?: (resultJson: string) => void;
     onReady?: () => void;
     onDone?: (resultJson: string) => void;

@@ -1,6 +1,6 @@
 extends RefCounted
 
-const Token = preload("res://engine/frontend/simple/token.gd")
+const Token = preload("res://engine/frontend/token.gd")
 const ScanError = preload("res://engine/frontend/scan_error.gd")
 
 # Assumptions:

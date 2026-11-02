@@ -1,8 +1,8 @@
 ﻿# Kindly
 
 A programming language and bytecode interpreter built in GDScript, with an Astro/React playground.
-The interpreter currently runs Simple, a Python-like syntax. The proposed Kindly syntax is documented
-in [the language specification](docs/kindly/language-specification.md).
+Simple and Kindly use separate lexers and compiler subclasses with a shared compilation core and virtual machine.
+Select a language in the playground or use `/editor?language=simple` or `/editor?language=kindly`.
 
 ## Requirements
 
@@ -40,6 +40,7 @@ Run after importing the runtime:
 ```sh
 godot --headless --path runtime --script res://addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode -a res://tests/unit -rd res://.godot/gdunit-reports
 godot --headless --path runtime --script res://tests/frontend/simple/run_declaration_tests.gd
+godot --headless --path runtime --script res://tests/frontend/run_language_tests.gd
 npm --prefix website test
 ```
 

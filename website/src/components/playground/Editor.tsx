@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { vim } from '@replit/codemirror-vim';
 import { indentUnit } from '@codemirror/language';
@@ -7,31 +7,41 @@ import { Compartment, countColumn, EditorState, Prec } from '@codemirror/state';
 import { EditorView, type ViewUpdate } from '@codemirror/view';
 import { Mail, PenLine, Send } from 'lucide-react';
 import Button from '../shared/Button';
-import type { RunResult, TokenizeResult } from './runtime-bridge';
+import type { Language, RunResult, TokenizeResult } from './runtime-bridge';
 import {
+  language as languageFacet,
+  revisionClock,
   setTokens,
   tokenState,
   tokenization as tokenizationSupport,
   utf16Offsets,
 } from '../../languages/tokenization';
-import { simple, initialSource } from '../../languages/simple';
+import { simple } from '../../languages/simple';
+import { kindly } from '../../languages/kindly';
 
 export type EditorStatus = 'loading' | 'ready' | 'running' | 'error';
-export type EditorDiagnostic = { source: string; error: RunResult['error'] };
+export type EditorDiagnostic = { language: Language; source: string; error: RunResult['error'] };
 
 type Props = {
+  language: Language;
+  initialSource: string;
+  onLanguageChange: (language: Language) => void;
+  onSourceChange: (source: string) => void;
   status: EditorStatus;
   diagnostic: EditorDiagnostic | null;
   tokenization: TokenizeResult | null;
   onRun: (source: string, subject: string) => void;
 };
 
+let revision = 0;
+const nextRevision = () => ++revision;
+
 const basicSetup = { foldGutter: false };
 const vimMode = new Compartment();
 const indentation = new Compartment();
 
 const extensions = [
-  simple(),
+  revisionClock.of(nextRevision),
   tokenizationSupport,
   vimMode.of([]),
   indentation.of([indentUnit.of('\t'), EditorState.tabSize.of(4)]),
@@ -43,8 +53,28 @@ const extensions = [
   EditorView.contentAttributes.of({ 'aria-label': 'Source code', spellcheck: 'false' }),
 ];
 
-export default function Editor({ status, diagnostic, tokenization, onRun }: Props) {
+export default function Editor({
+  language,
+  initialSource,
+  onLanguageChange,
+  onSourceChange,
+  status,
+  diagnostic,
+  tokenization,
+  onRun,
+}: Props) {
+  const languageExtensions = useMemo(
+    () => [languageFacet.of(language), language === 'kindly' ? kindly() : simple(), ...extensions],
+    [language]
+  );
   const [source, setSource] = useState(initialSource);
+  const handleSourceChange = useCallback(
+    (source: string) => {
+      setSource(source);
+      onSourceChange(source);
+    },
+    [onSourceChange]
+  );
   const [subject, setSubject] = useState('A small request');
   const [vimEnabled, setVimEnabled] = useState(false);
   const [tabSize, setTabSize] = useState(4);
@@ -60,10 +90,10 @@ export default function Editor({ status, diagnostic, tokenization, onRun }: Prop
     const snapshot = view.state.doc.toString();
     const timer = window.setTimeout(() => {
       if (view.state.field(tokenState).revision === revision)
-        window.tokenize?.(snapshot, 'simple', revision);
+        window.tokenize?.(snapshot, language, revision);
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [source, runtimeReady]);
+  }, [source, runtimeReady, language]);
 
   useEffect(() => {
     if (tokenization) editor.current?.view?.dispatch({ effects: setTokens.of(tokenization) });
@@ -105,7 +135,7 @@ export default function Editor({ status, diagnostic, tokenization, onRun }: Prop
       return;
     }
     const { source, error } = diagnostic;
-    if (view.state.doc.toString() !== source) return;
+    if (diagnostic.language !== language || view.state.doc.toString() !== source) return;
     if (!error || error.line < 0 || error.line >= view.state.doc.lines) {
       view.dispatch(setDiagnostics(view.state, []));
       return;
@@ -123,7 +153,7 @@ export default function Editor({ status, diagnostic, tokenization, onRun }: Prop
     view.dispatch(
       setDiagnostics(view.state, [{ from, to, severity: 'error', message: error.message }])
     );
-  }, [diagnostic]);
+  }, [diagnostic, language]);
 
   return (
     <section aria-labelledby="source-heading">
@@ -157,15 +187,26 @@ export default function Editor({ status, diagnostic, tokenization, onRun }: Prop
           ref={editor}
           className="code-editor"
           value={source}
-          onChange={setSource}
+          onChange={handleSourceChange}
           onUpdate={handleEditorUpdate}
-          extensions={extensions}
+          extensions={languageExtensions}
           height="100%"
           indentWithTab
           basicSetup={basicSetup}
         />
       </div>
       <footer>
+        <label>
+          Language
+          <select
+            aria-label="Language"
+            value={language}
+            onChange={(event) => onLanguageChange(event.target.value as Language)}
+          >
+            <option value="simple">Simple</option>
+            <option value="kindly">Kindly</option>
+          </select>
+        </label>
         <Button
           variant="ghost"
           role="switch"

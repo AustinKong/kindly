@@ -1,0 +1,201 @@
+---
+import type { Language } from '../playground/runtime-bridge';
+type Props = { language: Language };
+const { language } = Astro.props;
+const literals = language === 'kindly' ? 'true, false, none' : 'True, False, None';
+const operators = [
+  ['Call and indexing', 'f(...), value[index]', 'Left to right'],
+  ['Unary arithmetic', '+value, -value', 'Right to left'],
+  ['Multiplication', '*, /, %', 'Left to right'],
+  ['Addition', '+, -', 'Left to right'],
+  ['Comparison and equality', '<, <=, >, >=, ==, !=', 'Left to right'],
+  ['Logical negation', 'not', 'Right to left'],
+  ['Logical conjunction', 'and', 'Left to right'],
+  ['Logical disjunction', 'or', 'Left to right'],
+];
+---
+
+<section aria-labelledby="values">
+  <h2 id="values">Values and literals</h2>
+  <p>
+    A value can be a number, text, a boolean, a collection, or a function. Its type determines what
+    you can do with it. The following forms write values directly in your program:
+  </p>
+  <div>
+    <table>
+      <thead><tr><th scope="col">Type</th><th scope="col">Writing a value</th></tr></thead>
+      <tbody>
+        <tr
+          ><th scope="row">Number</th><td
+            >Write an integer such as <code>42</code>, or a decimal such as <code>3.14</code>. Use a
+            leading minus for a negative number: <code>-5</code>. Decimals have digits on both sides
+            of the point.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">String</th><td
+            >Put text between double quotes: <code>"Hello"</code>. A string fits on one line.
+            Characters between the quotes, including backslashes, are used literally.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">Boolean and null</th><td
+            ><code>{literals}</code>. Booleans represent true and false. The null value represents
+            the absence of a value, including the result of a function that returns without a value.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">List</th><td
+            >Put values in square brackets, separated by commas: <code>[1, "two", 3]</code>. A list
+            keeps its values in order and can be changed.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">Dictionary</th><td
+            >Put key-value pairs in braces: <code>{'{"name": "Ada", "score": 90}'}</code>. Separate
+            each key and value with a colon. Keys may be strings, numbers, booleans, or null.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">Deque</th><td
+            >Call <code>deque()</code> to create an empty deque, or <code>deque([1, 2])</code> to start
+            with values. A deque allows values to be added or removed at either end.</td
+          ></tr
+        >
+        <tr
+          ><th scope="row">Function</th><td
+            >A function is also a value. You can store it in a variable, pass it to another
+            function, or return it from a function.</td
+          ></tr
+        >
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Lists and dictionaries can contain other collections. In a dictionary, a later entry with the
+    same key replaces the earlier value.
+  </p>
+</section>
+
+<section aria-labelledby="expressions">
+  <h2 id="expressions">Expressions</h2>
+  <p>
+    An expression produces a value. For example, <code>2 + 3 * 4</code> produces <code>14</code>:
+    multiplication is performed before addition. Parentheses let you choose a different order, so <code
+      >(2 + 3) * 4</code
+    > produces <code>20</code>.
+  </p>
+  <p>
+    This table lists operators from highest to lowest precedence. The last column gives the grouping
+    order when operators have the same precedence.
+  </p>
+  <div>
+    <table>
+      <thead
+        ><tr
+          ><th scope="col">Operation</th><th scope="col">Operators</th><th scope="col">Grouping</th
+          ></tr
+        ></thead
+      >
+      <tbody
+        >{
+          operators.map(([name, syntax, associativity]) => (
+            <tr>
+              <>
+                <th scope="row">{name}</th>
+                <td>
+                  <code>{syntax}</code>
+                </td>
+                <td>{associativity}</td>
+              </>
+            </tr>
+          ))
+        }</tbody
+      >
+    </table>
+  </div>
+  {
+    language === 'simple' && (
+      <p>
+        Assignment (<code>=</code>) has the lowest precedence and groups right to left.
+      </p>
+    )
+  }
+  <h3>Arithmetic and comparison</h3>
+  <p>
+    Arithmetic works on integers and decimals. Division produces a decimal result: <code>5 / 2</code
+    > is <code>2.5</code>. The remainder operator, <code>%</code>, gives the remainder after
+    division: <code>10 % 3</code> is <code>1</code>. Its result has the same sign as the first
+    operand; the second operand must be nonzero.
+  </p>
+  <p>
+    Addition also joins strings: <code>"Hello, " + "Ada"</code> produces <code>"Hello, Ada"</code>.
+    Use two strings when joining text.
+  </p>
+  <p>
+    Use <code>==</code> to test whether values are equal, and <code>!=</code> to test whether they differ.
+    The operators <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, and <code>&gt;=</code> compare
+    numbers. To test a range, combine comparisons: <code>score &gt;= 50 and score &lt; 80</code>.
+  </p>
+  <h3>Boolean expressions</h3>
+  <p>
+    <code>and</code> combines conditions that must both hold. <code>or</code> combines alternatives. <code
+      >not</code
+    > reverses a condition. For example, <code>age &gt;= 18 and active</code> checks both age and activity.
+  </p>
+  <p>
+    A condition can use any value. Null, false, zero, empty strings, and empty collections count as
+    false; other values count as true.
+  </p>
+  <p>
+    <code>and</code> evaluates its right operand only when the left operand counts as true. <code
+      >or</code
+    > evaluates its right operand only when the left counts as false. They return the selected operand.
+    <code>not</code> returns a boolean.
+  </p>
+</section>
+
+<section aria-labelledby="collections">
+  <h2 id="collections">Indexing and mutation</h2>
+  <p>
+    Use square brackets to select a value: <code>items[0]</code> selects the first entry of a list or
+    deque, and <code>record["name"]</code> selects a dictionary value by key.
+  </p>
+  <p>
+    List, deque, and string indices start at zero. A negative index counts from the end, so <code
+      >items[-1]</code
+    > selects the last entry. The index must be an integer within the sequence's bounds. Indexing a string
+    returns one character as a string.
+  </p>
+  <p>
+    Updating an entry changes the collection. A dictionary update can add a new key. Reading a
+    missing key raises an error; use <a href="/docs/standard-library#dictionaries">get</a> to supply a
+    fallback value.
+  </p>
+  <p>
+    Two variables can refer to the same collection. Changing an entry through one variable is
+    visible through the other. The <a href="/docs/standard-library#collections">copy</a> function creates
+    a separate outer collection; collections nested inside it remain shared. Strings keep their contents
+    unchanged; create a new string to produce different text.
+  </p>
+  <p>
+    Use <a href="/docs/standard-library#slicing">slice</a> to select a range. For example, <code
+      >slice([10, 20, 30, 40], 1, 3)</code
+    > returns <code>[20, 30]</code>. The start is included and the stop is excluded.
+  </p>
+</section>
+
+<section aria-labelledby="execution">
+  <h2 id="execution">Running a program</h2>
+  <p>
+    Open the editor, enter a program, and select <strong>Send</strong>. The reply shows values
+    written by <code>print</code>. Each run starts with fresh variables and the <a
+      href="/docs/standard-library">standard library</a
+    >.
+  </p>
+  <p>
+    If the program has a syntax error, correct the highlighted location before running it again. An
+    error during execution stops the program at that point. Output already printed remains in the
+    reply, along with the error location and function call stack.
+  </p>
+</section>

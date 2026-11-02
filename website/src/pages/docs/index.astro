@@ -1,18 +1,38 @@
 ---
-import Layout from '../../layouts/Layout.astro';
+import DocsLayout from '../../layouts/DocsLayout.astro';
 ---
 
-<Layout title="Documentation · Kindly" description="Language documentation for Kindly and Simple.">
-  <main>
-    <h1>Documentation.</h1>
-    <p><a href="/docs/simple">Simple</a> is the executable syntax used by the playground.</p>
-    <p>Kindly's polite syntax is in development.</p>
-  </main>
-</Layout>
-
-<style>
-  main {
-    max-width: 50rem;
-    padding-block: 3rem 6rem;
-  }
-</style>
+<DocsLayout
+  title="Documentation - Kindly"
+  description="Language and standard library reference for Kindly and Simple."
+>
+  <h1>Documentation</h1>
+  <p>
+    Kindly and Simple share a runtime and standard library. Their statement syntax differs;
+    expressions, collection types, and function behavior are shared.
+  </p>
+  <section aria-labelledby="references">
+    <h2 id="references">Reference</h2>
+    <div>
+      <table>
+        <thead>
+          <tr><th scope="col">Documentation</th><th scope="col">Contents</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row"><a href="/docs/kindly">Kindly</a></th>
+            <td>Program structure, variables, functions, conditions, and loops.</td>
+          </tr>
+          <tr>
+            <th scope="row"><a href="/docs/simple">Simple</a></th>
+            <td>Declarations, assignment, control flow, and functions in conventional syntax.</td>
+          </tr>
+          <tr>
+            <th scope="row"><a href="/docs/standard-library">Standard library</a></th>
+            <td>Built-in functions, signatures, return values, and Simple examples.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</DocsLayout>

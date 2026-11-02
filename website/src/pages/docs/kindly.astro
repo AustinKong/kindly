@@ -1,0 +1,272 @@
+---
+import { Code } from 'astro:components';
+import { ArrowUpRight } from '@lucide/astro';
+import Button from '../../components/shared/Button.astro';
+import { kindlyGrammar } from '../../languages/kindly/grammar';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import LanguageReference from '../../components/shared/LanguageReference.astro';
+
+const examples = {
+  program: `Dear Compiler,
+
+Please let message be "Hello, world!".
+Kindly execute print(message).
+
+Best regards.`,
+  variables: `Please let count be 0.
+Please update count to count + 1.
+Kindly execute print(count).`,
+  indexing: `Please let items be [10, 20, 30].
+Please update items[1] to 99.
+Please let record be {"name": "Ada"}.
+Please update record["score"] to items[-1].
+Kindly execute print(record["score"]).`,
+  conditions: `Please let score be 72.
+With respect to score >= 80:
+\tKindly execute print("High").
+Alternatively, if score >= 50:
+\tKindly execute print("Pass").
+Otherwise:
+\tKindly execute print("Fail").`,
+  range: `For each i from 0 to 3:
+\tKindly execute print(i).`,
+  step: `For each i from 3 to 0 step -1:
+\tKindly execute print(i).`,
+  while: `Please let count be 0.
+As long as count < 3:
+\tKindly execute print(count).
+\tPlease update count to count + 1.`,
+  control: `For each i from 0 to 5:
+\tWith respect to i == 1:
+\t\tKindly proceed.
+\tWith respect to i == 3:
+\t\tKindly cease.
+\tKindly execute print(i).`,
+  functions: `Please define double(value):
+\tKindly return value * 2.
+
+Please let result be double(5).
+Kindly execute print(result).`,
+  defaults: `Please define greet(name = "world"):
+\tKindly return "Hello, " + name.
+
+Kindly execute print(greet()).
+Kindly execute print(greet("Ada")).`,
+  closures: `Please define make_counter():
+\tPlease let count be 0.
+\tPlease define next():
+\t\tPlease update count to count + 1.
+\t\tKindly return count.
+\tKindly return next.
+
+Please let counter be make_counter().
+Kindly execute print(counter()).
+Kindly execute print(counter()).`,
+};
+---
+
+<DocsLayout
+  title="Kindly documentation"
+  description="Learn Kindly's program structure, variables, functions, conditions, and loops."
+  active="kindly"
+>
+  <h1>Kindly</h1>
+  <p>
+    A Kindly program contains instructions written as requests. Each program starts with a greeting
+    and ends with a sign-off.
+  </p>
+  <Button href="/editor?language=kindly" variant="primary">
+    Open the editor <ArrowUpRight aria-hidden="true" />
+  </Button>
+  <nav aria-label="On this page">
+    <a href="#program">First program</a><a href="#variables">Variables</a><a href="#conditions"
+      >Conditionals</a
+    ><a href="#loops">Loops</a><a href="#functions">Functions</a><a href="#source">Source format</a
+    ><a href="#values">Values</a><a href="#expressions">Expressions</a><a href="#collections"
+      >Indexing</a
+    ><a href="#execution">Execution</a>
+  </nav>
+
+  <section aria-labelledby="program">
+    <h2 id="program">First program</h2>
+    <p>This program prints <code>Hello, world!</code>:</p>
+    <Code code={examples.program} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      <code>Dear Compiler,</code> opens the program. <code
+        >Please let message be "Hello, world!".</code
+      > creates a variable named <code>message</code> containing the text. <code
+        >Kindly execute print(message).</code
+      > calls the <code>print</code> function to display that text. <code>Best regards.</code> closes
+      the program.
+    </p>
+    <p>
+      Keep the greeting and sign-off on their own lines, without indentation. End each instruction
+      with a period. Blank lines and comments may appear between instructions.
+    </p>
+    <p>The examples below show the instructions that go between the greeting and sign-off.</p>
+  </section>
+
+  <section aria-labelledby="variables">
+    <h2 id="variables">Variables</h2>
+    <p>
+      A variable gives a value a name. Write <code>Please let name be value.</code> to create one. To
+      change its value later, write <code>Please update name to value.</code>.
+    </p>
+    <Code code={examples.variables} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>1</code>. In the update, <code>count + 1</code> uses the current value of <code
+        >count</code
+      >, adds one, and stores the result under the same name.
+    </p>
+    <p>
+      Every declaration needs a starting value. Use an update to change a variable you have already
+      declared.
+    </p>
+    <h3>Lists and dictionaries</h3>
+    <p>
+      A list stores values in order, using square brackets. A dictionary stores values under keys,
+      using braces. To access an entry, put its index or key in square brackets after the variable's
+      name.
+    </p>
+    <Code code={examples.indexing} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      List indices start at <code>0</code>, so <code>items[1]</code> selects the second value. <code
+        >items[-1]</code
+      > selects the last value. Updating <code>record["score"]</code> adds a new dictionary entry; the
+      example prints <code>30</code>.
+    </p>
+  </section>
+
+  <section aria-labelledby="conditions">
+    <h2 id="conditions">Conditionals</h2>
+    <p>
+      Use <code>With respect to condition:</code> to run instructions when a condition is true. End the
+      header with a colon and indent its instructions with a tab. The indented instructions form a block.
+    </p>
+    <Code code={examples.conditions} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>Pass</code>. The program checks the conditions in order and runs the first
+      matching block. <code>Alternatively, if</code> adds another condition; <code>Otherwise:</code> handles
+      the remaining case. Both branches are optional.
+    </p>
+    <p>
+      Use <code>==</code> to test equality, and <code>&lt;</code>, <code>&lt;=</code>, <code
+        >&gt;</code
+      >, or <code>&gt;=</code> to compare numbers. Conditions can also use <code>and</code>, <code
+        >or</code
+      >, and <code>not</code>; see <a href="#expressions">Expressions</a>.
+    </p>
+  </section>
+
+  <section aria-labelledby="loops">
+    <h2 id="loops">Loops</h2>
+    <h3>Counting through a range</h3>
+    <p>
+      Use <code>For each name from start to stop:</code> to repeat a block with a counter. The counter
+      starts at <code>start</code> and increases by one, stopping before <code>stop</code>.
+    </p>
+    <Code code={examples.range} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>0</code>, <code>1</code>, and <code>2</code>. The counter <code>i</code> holds
+      the current number on each iteration.
+    </p>
+    <p>Add <code>step</code> to choose a different increment. A negative step counts backwards:</p>
+    <Code code={examples.step} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>3</code>, <code>2</code>, and <code>1</code>. Start, stop, and step are
+      evaluated once when the loop begins. A zero step runs no iterations.
+    </p>
+    <h3>Repeating while a condition holds</h3>
+    <p>
+      <code>As long as condition:</code> checks a condition before each repetition. The loop ends when
+      that condition becomes false.
+    </p>
+    <Code code={examples.while} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>0</code>, <code>1</code>, and <code>2</code>. The update advances <code
+        >count</code
+      > towards the stopping condition.
+    </p>
+    <h3>Skipping or ending an iteration</h3>
+    <p>
+      Inside a loop, <code>Kindly proceed.</code> skips the rest of the current iteration. <code
+        >Kindly cease.</code
+      > ends the loop. In nested loops, these statements affect the innermost loop.
+    </p>
+    <Code code={examples.control} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      This prints <code>0</code> and <code>2</code>. The loop skips <code>1</code> and ends when the counter
+      reaches <code>3</code>. A range loop advances its counter after <code>Kindly proceed.</code>.
+    </p>
+  </section>
+
+  <section aria-labelledby="functions">
+    <h2 id="functions">Functions</h2>
+    <p>
+      A function names a block of instructions so you can reuse it. Define one with <code
+        >Please define name(parameters):</code
+      >. A parameter receives a value supplied by the caller.
+    </p>
+    <Code code={examples.functions} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      <code>double(5)</code> calls <code>double</code> with <code>value</code> set to <code>5</code
+      >. <code>Kindly return value * 2.</code> sends the result back to the caller, where it is stored
+      in <code>result</code>. The program prints <code>10</code>.
+    </p>
+    <p>
+      When you need a call's result, use the call in an expression, as in <code
+        >Please let result be double(5).</code
+      >. When you only need the function to perform an action, use <code>Kindly execute</code>. This
+      is also how you call standard-library functions such as <code>print</code> and <code
+        >append</code
+      >.
+    </p>
+    <p>
+      Supply arguments in parameter order, separated by commas. Arguments are evaluated from left to
+      right. Within a function, <code>Kindly return.</code> returns <code>none</code>, which
+      represents no value. Reaching the end of a function has the same result.
+    </p>
+    <h3>Default arguments</h3>
+    <p>
+      Give a parameter a default with <code>name = value</code>. The caller can then omit that
+      argument:
+    </p>
+    <Code code={examples.defaults} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      The calls print <code>Hello, world</code> and <code>Hello, Ada</code>. Put required parameters
+      before parameters with defaults. A default expression is evaluated each time its argument is
+      omitted, and may refer to earlier parameters.
+    </p>
+    <h3>Nested functions</h3>
+    <p>
+      A function can define and return another function. The returned function retains access to
+      variables declared around it:
+    </p>
+    <Code code={examples.closures} lang={kindlyGrammar} theme="github-light" />
+    <p>
+      The calls to <code>counter()</code> print <code>1</code> and then <code>2</code>. Both calls
+      update the same <code>count</code>, even after <code>make_counter()</code> has returned. A function
+      can also call itself to perform recursion.
+    </p>
+  </section>
+
+  <section aria-labelledby="source">
+    <h2 id="source">Source format</h2>
+    <p>
+      Write one instruction per line and end it with a period. A block header ends with a colon;
+      indent the instructions in that block with tabs. Return to an earlier indentation level to
+      continue outside the block.
+    </p>
+    <p>
+      A <code>#</code> begins a comment that continues to the end of the line. Blank lines and comment-only
+      lines do not change indentation. Inside parentheses, brackets, or braces, an expression can continue
+      onto the next line.
+    </p>
+    <p>
+      The phrases ignore case: <code>Please let</code> and <code>PLEASE LET</code> mean the same thing.
+      Variable names are case-sensitive, so <code>Count</code> and <code>count</code> are different names.
+    </p>
+  </section>
+
+  <LanguageReference language="kindly" />
+</DocsLayout>

@@ -1,7 +1,7 @@
 extends GdUnitTestSuite
 
 const Lexer = preload("res://engine/frontend/simple/lexer.gd")
-const Token = preload("res://engine/frontend/simple/token.gd")
+const Token = preload("res://engine/frontend/token.gd")
 const ScanError = preload("res://engine/frontend/scan_error.gd")
 const EditorTokens = preload("res://engine/frontend/editor_tokens.gd")
 

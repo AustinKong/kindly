@@ -1,0 +1,65 @@
+.docs {
+  max-width: 60rem;
+  padding-block: 2rem 6rem;
+}
+.docs a {
+  color: var(--color-navy);
+  text-underline-offset: 0.2em;
+}
+.docs nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-block: 1.5rem;
+}
+.docs section {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1.75rem;
+}
+.docs h2 {
+  font-size: 2rem;
+  scroll-margin-top: 1rem;
+}
+.docs h3 {
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  letter-spacing: 0;
+  margin-block: 1.5rem 0.75rem;
+}
+.docs li {
+  margin-block: 0.4rem;
+}
+.docs pre {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--color-surface);
+  line-height: 1.6;
+  tab-size: 4;
+}
+.docs section > div {
+  overflow-x: auto;
+}
+.docs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.docs th,
+.docs td {
+  padding: 0.7rem;
+  border: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+.docs th {
+  font-weight: 500;
+}
+.docs thead {
+  background: var(--color-tint);
+}
+.docs tbody th {
+  width: 35%;
+}

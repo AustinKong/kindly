@@ -30,7 +30,7 @@ func _on_tokenize(arguments: Array) -> void:
 	if arguments.size() != 3 or not arguments[0] is String or not arguments[1] is String or typeof(arguments[2]) not in [TYPE_INT, TYPE_FLOAT]:
 		_host.onBridgeError("Invalid tokenization request.")
 		return
-	if arguments[1] != "simple":
+	if not LanguageInterpreter.LEXERS.has(arguments[1]):
 		_host.onBridgeError("Unsupported language: " + arguments[1])
 		return
 	_tokenize.call_deferred(arguments[0], arguments[1], int(arguments[2]))
@@ -41,7 +41,7 @@ func _tokenize(source: String, language: String, revision: int) -> void:
 
 
 func _on_run(arguments: Array) -> void:
-	if arguments.size() != 2 or not arguments[0] is String or typeof(arguments[1]) not in [TYPE_INT, TYPE_FLOAT]:
+	if arguments.size() != 3 or not arguments[0] is String or not arguments[1] is String or typeof(arguments[2]) not in [TYPE_INT, TYPE_FLOAT]:
 		_host.onBridgeError("Invalid interpreter request.")
 		return
 
@@ -50,17 +50,17 @@ func _on_run(arguments: Array) -> void:
 
 	_running = true
 	# Return to JavaScript before interpreting on Godot's next frame.
-	_run.call_deferred(arguments[0], int(arguments[1]))
+	_run.call_deferred(arguments[0], arguments[1], int(arguments[2]))
 
 
-func _run(source: String, run_id: int) -> void:
+func _run(source: String, language: String, run_id: int) -> void:
 	var output: Array[String] = []
-	var error: Variant = LanguageInterpreter.new().interpret(
+	var error: Variant = LanguageInterpreter.new(language).interpret(
 		source,
 		func(text: String) -> void: output.append(text)
 	)
 
-	var result := {"runId": run_id, "ok": error == null, "output": output, "error": null}
+	var result := {"runId": run_id, "language": language, "ok": error == null, "output": output, "error": null}
 	if error != null:
 		var phase := "runtime" if error is RuntimeError else ("compile" if error is CompileError else "scan")
 		result.error = {"phase": phase, "message": error.message, "line": error.line, "stackTrace": []}

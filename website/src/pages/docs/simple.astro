@@ -1,92 +1,175 @@
 ---
-import { ArrowLeft, ArrowRight } from '@lucide/astro';
 import { Code } from 'astro:components';
-import Layout from '../../layouts/Layout.astro';
+import { ArrowUpRight } from '@lucide/astro';
+import Button from '../../components/shared/Button.astro';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import LanguageReference from '../../components/shared/LanguageReference.astro';
 import { simpleGrammar } from '../../languages/simple/grammar';
 
-const hello = 'var message = "Hello, Kindly!"\nprint(message)';
-const conditions = 'var count = 0\n\nwhile count < 3:\n\tprint(count)\n\tcount = count + 1';
-const functions =
-  'def greet(name = "world"):\n\treturn "Hello, " + name + "!"\n\nprint(greet())\nprint(greet("friend"))';
+const examples = {
+  program: `var message = "Hello, world!"
+print(message)`,
+  variables: `var count = 0
+var pending
+count = count + 1
+var first = 0
+var second = 0
+first = second = 5
+print(count)`,
+  conditions: `var score = 72
+if score >= 80:
+\tprint("High")
+elif score >= 50:
+\tprint("Pass")
+else:
+\tprint("Fail")`,
+  loops: `for var i = 0 to 6 step 2:
+\tprint(i)
+
+var count = 0
+while count < 5:
+\tcount = count + 1
+\tif count == 2:
+\t\tcontinue
+\tif count == 4:
+\t\tbreak
+\tprint(count)`,
+  counter: `var i = 0
+for i = 3 to 0 step -1:
+\tprint(i)
+print(i)`,
+  functions: `def greet(name = "world"):
+\treturn "Hello, " + name
+
+print(greet())
+print(greet("Ada"))`,
+  closures: `def make_counter():
+\tvar count = 0
+\tdef next():
+\t\tcount = count + 1
+\t\treturn count
+\treturn next
+
+var counter = make_counter()
+print(counter())
+print(counter())`,
+  indexing: `var items = [10, 20, 30]
+items[1] = 99
+var record = {"name": "Ada"}
+record["score"] = items[-1]
+print(record["score"])`,
+};
 ---
 
-<Layout
-  title="Simple documentation · Kindly"
-  description="Simple syntax: variables, control flow, and functions."
+<DocsLayout
+  title="Simple reference - Kindly"
+  description="Simple language reference: syntax, values, expressions, and control flow."
+  active="simple"
 >
-  <main>
-    <a href="/"><ArrowLeft size={16} aria-hidden="true" /> Kindly</a>
-    <header>
-      <small>Simple</small>
-      <h1>Simple syntax.</h1>
-      <p>
-        The playground's executable syntax. Indent blocks with tabs and use double-quoted strings.
-      </p>
-      <a href="/editor">Open the editor <ArrowRight size={16} aria-hidden="true" /></a>
-    </header>
-    <section aria-labelledby="getting-started">
-      <h2 id="getting-started">Start with a hello</h2>
-      <p>
-        Declare a variable with <code>var</code> and use <code>print</code> to send a value to the console.
-        Copy this example into the editor and select Run.
-      </p>
-      <Code code={hello} lang={simpleGrammar} theme="github-light" />
-      <p>
-        Change an existing value with assignment, such as <code>message = "Hello again!"</code>.
-        Declaring the same name twice in one scope is an error.
-      </p>
-    </section>
-    <section aria-labelledby="control-flow">
-      <h2 id="control-flow">Take it one step at a time</h2>
-      <p>
-        Use <code>while</code> to repeat work, and <code>if</code>, <code>elif</code>, and <code
-          >else</code
-        > to choose what happens next. Indentation groups statements into a block.
-      </p>
-      <Code code={conditions} lang={simpleGrammar} theme="github-light" />
-    </section>
-    <section aria-labelledby="functions">
-      <h2 id="functions">Put a name to it</h2>
-      <p>
-        Define a function with <code>def</code> and return a value with <code>return</code>.
-        Parameters can have default values.
-      </p>
-      <Code code={functions} lang={simpleGrammar} theme="github-light" />
-    </section>
-  </main>
-</Layout>
+  <h1>Simple</h1>
+  <p>Simple programs use named variables, function calls, and indented blocks to describe work.</p>
+  <Button href="/editor?language=simple" variant="primary">
+    Open the editor <ArrowUpRight aria-hidden="true" />
+  </Button>
+  <nav aria-label="On this page">
+    <a href="#source">Source format</a><a href="#variables">Variables</a><a href="#conditions"
+      >Conditionals</a
+    ><a href="#loops">Loops</a><a href="#functions">Functions</a><a href="#values">Values</a><a
+      href="#expressions">Expressions</a
+    ><a href="#collections">Indexing</a><a href="#execution">Execution</a>
+  </nav>
+  <p>
+    This program stores text in a variable named <code>message</code> and calls <code>print</code> to
+    display it:
+  </p>
+  <Code code={examples.program} lang={simpleGrammar} theme="github-light" />
 
-<style>
-  main {
-    max-width: 50rem;
-    padding-block: 3rem 6rem;
-  }
-  main > a {
-    display: inline-block;
-    margin-bottom: 3rem;
-    font-size: 0.875rem;
-  }
-  a {
-    color: var(--color-navy);
-    text-underline-offset: 0.2em;
-  }
-  h1 {
-    margin-top: 0.75rem;
-  }
-  h2 {
-    font-size: 2rem;
-  }
-  header p {
-    font-size: 1.1rem;
-  }
-  section {
-    margin-top: 3rem;
-    border-top: 1px solid var(--color-border);
-    padding-top: 2.5rem;
-  }
-  main :global(pre) {
-    border: 1px solid var(--color-border);
-    border-radius: 0.5rem;
-    padding: 1.5rem;
-  }
-</style>
+  <section aria-labelledby="source">
+    <h2 id="source">Source format</h2>
+    <p>
+      Statements end at a newline. An expression can be used as a statement; its result is
+      discarded. Block headers end with a colon and require an indented body. Use tabs for
+      indentation; a dedent must match an earlier indentation level. Blank and comment-only lines do
+      not affect blocks.
+    </p>
+    <p>
+      A <code>#</code> starts a comment through the end of the line. Expressions can span lines inside
+      parentheses, brackets, and braces; indentation within those delimiters may use spaces.
+    </p>
+  </section>
+
+  <section aria-labelledby="variables">
+    <h2 id="variables">Variables and assignment</h2>
+    <p>
+      <code>var name = expression</code> creates a variable with the result of an expression. Omitting
+      the initializer assigns <code>None</code>.
+    </p>
+    <p>
+      <code>name = expression</code> changes the value of an existing variable. Assignment is an expression
+      that returns the assigned value; chained assignment is evaluated right to left. Assigning an undeclared
+      global raises a runtime error.
+    </p>
+    <Code code={examples.variables} lang={simpleGrammar} theme="github-light" />
+    <p>
+      Indexed assignment updates a list or deque element, or inserts or replaces a dictionary entry.
+    </p>
+    <Code code={examples.indexing} lang={simpleGrammar} theme="github-light" />
+  </section>
+
+  <section aria-labelledby="conditions">
+    <h2 id="conditions">Conditionals</h2>
+    <p>
+      <code>if</code> evaluates a condition. Optional <code>elif</code> branches are checked in order;
+      <code>else</code> runs when no earlier condition was truthy.
+    </p>
+    <Code code={examples.conditions} lang={simpleGrammar} theme="github-light" />
+  </section>
+
+  <section aria-labelledby="loops">
+    <h2 id="loops">Loops</h2>
+    <p>
+      <code>while expression:</code> evaluates its condition before each iteration. <code
+        >for var name = start to stop step increment:</code
+      > creates a counter for the loop. The stop bound is exclusive; the default step is <code
+        >1</code
+      >.
+    </p>
+    <p>
+      Start, stop, and step are evaluated once on entry. Positive and negative steps are supported.
+      A zero step runs no iterations. For positive steps, iteration continues while the counter is
+      less than stop; for negative steps, while it is greater than stop.
+    </p>
+    <p>
+      <code>break</code> exits the innermost loop. <code>continue</code> starts its next iteration; a
+      numeric loop still increments its counter. Both are invalid outside loops.
+    </p>
+    <Code code={examples.loops} lang={simpleGrammar} theme="github-light" />
+    <p>
+      Omit <code>var</code> to update an existing counter. That binding remains available after the loop.
+    </p>
+    <Code code={examples.counter} lang={simpleGrammar} theme="github-light" />
+  </section>
+
+  <section aria-labelledby="functions">
+    <h2 id="functions">Functions</h2>
+    <p>
+      <code>def name(parameters):</code> declares a function. Arguments are positional and evaluated left
+      to right. Parameters may have defaults; required parameters must precede optional ones. A default
+      expression is evaluated on each call that omits that argument, and may refer to earlier parameters.
+    </p>
+    <p>
+      <code>return expression</code> returns a value. <code>return</code> on its own and reaching the
+      end of a function return <code>None</code>. A top-level return stops the program. Calls with
+      an incorrect argument count raise a runtime error.
+    </p>
+    <Code code={examples.functions} lang={simpleGrammar} theme="github-light" />
+    <p>
+      A function can call itself. It can also define and return another function. In this example,
+      the returned function keeps access to <code>count</code>; successive calls print <code>1</code
+      > and <code>2</code>.
+    </p>
+    <Code code={examples.closures} lang={simpleGrammar} theme="github-light" />
+  </section>
+
+  <LanguageReference language="simple" />
+</DocsLayout>

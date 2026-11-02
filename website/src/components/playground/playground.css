@@ -127,6 +127,20 @@
 .code-editor .cm-activeLineGutter {
   background: var(--color-tint);
 }
+.code-editor .cm-editor:has(.cm-selectionBackground) .cm-activeLine,
+.code-editor .cm-editor:has(.cm-selectionBackground) .cm-activeLineGutter {
+  background: transparent;
+}
+.code-editor .cm-editor .cm-selectionBackground {
+  background: color-mix(in srgb, var(--color-pale) 60%, white);
+}
+.code-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background: var(--color-pale);
+}
+.code-editor .cm-content::selection,
+.code-editor .cm-content ::selection {
+  background: var(--color-pale);
+}
 .playground > section > footer {
   display: flex;
   flex-wrap: wrap;

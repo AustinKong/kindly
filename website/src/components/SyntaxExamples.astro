@@ -4,24 +4,99 @@ import { BadgeCheck, CircleAlert } from '@lucide/astro';
 import Button from './shared/Button.astro';
 import Badge from './shared/Badge.astro';
 import { simpleGrammar } from '../languages/simple/grammar';
+import { kindlyGrammar } from '../languages/kindly/grammar';
 
 const examples = [
   {
-    label: 'Variables',
-    traditional: 'var x = 10\nprint(x)',
-    kindly: 'With respect to x, let it be 10.\nKindly print x.\nThank you.',
+    label: 'FizzBuzz',
+    traditional: `for var i = 1 to 16:
+\tif i % 15 == 0:
+\t\tprint("FizzBuzz")
+\telif i % 3 == 0:
+\t\tprint("Fizz")
+\telif i % 5 == 0:
+\t\tprint("Buzz")
+\telse:
+\t\tprint(i)`,
+    kindly: `Dear Compiler,
+
+For each i from 1 to 16:
+\tWith respect to i % 15 == 0:
+\t\tKindly execute print("FizzBuzz").
+\tAlternatively, if i % 3 == 0:
+\t\tKindly execute print("Fizz").
+\tAlternatively, if i % 5 == 0:
+\t\tKindly execute print("Buzz").
+\tOtherwise:
+\t\tKindly execute print(i).
+
+Best regards.`,
   },
   {
-    label: 'Functions',
-    traditional: 'def greet(name):\n\treturn "Hello, " + name\n\nprint(greet("world"))',
-    kindly:
-      'With respect to greet, let it accept name.\n\tKindly return "Hello, " + name.\nThat will be all.\n\nKindly print greet("world").\nThank you.',
+    label: 'Memoized Fibonacci',
+    traditional: `var memo = {0: 0, 1: 1}
+
+def fibonacci(n):
+\tif not contains(memo, n):
+\t\tmemo[n] = fibonacci(n - 1) + fibonacci(n - 2)
+\treturn memo[n]
+
+print(fibonacci(30))`,
+    kindly: `Dear Compiler,
+
+Please let memo be {0: 0, 1: 1}.
+
+Please define fibonacci(n):
+\tWith respect to not contains(memo, n):
+\t\tPlease update memo[n] to fibonacci(n - 1) + fibonacci(n - 2).
+\tKindly return memo[n].
+
+Kindly execute print(fibonacci(30)).
+
+Best regards.`,
   },
   {
-    label: 'Collections',
-    traditional: 'var colors = ["sage", "clay"]\nappend(colors, "ochre")\nprint(colors)',
-    kindly:
-      'With respect to colors, let it be ["sage", "clay"].\nKindly append "ochre" to colors.\nKindly print colors.\nThank you.',
+    label: 'BFS',
+    traditional: `var graph = {
+\t"A": ["B", "C"],
+\t"B": ["D"],
+\t"C": ["D"],
+\t"D": []
+}
+var queue = deque(["A"])
+var visited = {"A": True}
+
+while len(queue) > 0:
+\tvar node = pop_front(queue)
+\tprint(node)
+\tvar neighbors = graph[node]
+\tfor var i = 0 to len(neighbors):
+\t\tvar neighbor = neighbors[i]
+\t\tif not contains(visited, neighbor):
+\t\t\tvisited[neighbor] = True
+\t\t\tappend(queue, neighbor)`,
+    kindly: `Dear Compiler,
+
+Please let graph be {
+\t"A": ["B", "C"],
+\t"B": ["D"],
+\t"C": ["D"],
+\t"D": []
+}.
+Please let queue be deque(["A"]).
+Please let visited be {"A": true}.
+
+As long as len(queue) > 0:
+\tPlease let node be pop_front(queue).
+\tKindly execute print(node).
+\tPlease let neighbors be graph[node].
+\tFor each i from 0 to len(neighbors):
+\t\tPlease let neighbor be neighbors[i].
+\t\tWith respect to not contains(visited, neighbor):
+\t\t\tPlease update visited[neighbor] to true.
+\t\t\tKindly execute append(queue, neighbor).
+
+Best regards.`,
   },
 ];
 ---
@@ -70,7 +145,7 @@ const examples = [
               Corporate approved
             </Badge>
           </header>
-          <Code code={example.kindly} lang="text" theme="github-light" />
+          <Code code={example.kindly} lang={kindlyGrammar} theme="github-light" />
           <p>Respectful. Considerate. Suitable for all professional environments.</p>
         </article>
       </div>

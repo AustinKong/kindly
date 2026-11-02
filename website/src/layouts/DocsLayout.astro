@@ -1,0 +1,18 @@
+---
+import Layout from './Layout.astro';
+import Navigation from '../components/shared/Navigation';
+import type { Language } from '../components/playground/runtime-bridge';
+import '../styles/docs.css';
+
+type Props = {
+  title: string;
+  description: string;
+  active?: Language | 'standard-library';
+};
+const { title, description, active } = Astro.props;
+---
+
+<Layout title={title} description={description}>
+  <Navigation active={active} />
+  <main class="docs"><slot /></main>
+</Layout>

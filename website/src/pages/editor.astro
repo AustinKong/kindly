@@ -1,14 +1,10 @@
 ---
-import { ArrowLeft } from '@lucide/astro';
 import Layout from '../layouts/Layout.astro';
 import Playground from '../components/playground/Playground';
 ---
 
 <Layout title="Editor · Kindly">
   <main>
-    <header>
-      <a href="/"><ArrowLeft size={16} aria-hidden="true" /> Kindly</a>
-    </header>
     <Playground client:load />
   </main>
 </Layout>
@@ -22,14 +18,8 @@ import Playground from '../components/playground/Playground';
     min-height: 100svh;
     padding: 1.5rem;
   }
-  header {
-    flex-shrink: 0;
-  }
-  a {
-    display: inline-block;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    text-decoration: none;
+  main :global(.page-nav) {
+    margin: 0;
   }
   @media (max-width: 48rem) {
     main {
