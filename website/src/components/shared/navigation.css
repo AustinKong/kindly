@@ -28,4 +28,7 @@
   .page-nav {
     margin: 1rem;
   }
+  .page-nav .ui-button[data-variant='secondary'] {
+    display: none;
+  }
 }
